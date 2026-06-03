@@ -4,7 +4,7 @@ using Telegram.Bot.Types;
 
 namespace left_4_bot.Handlers;
 
-public sealed class GroupMentionHandler
+public sealed class GroupCommandHandler
 {
     public async Task HandleAsync(
         ITelegramBotClient bot,
@@ -14,9 +14,10 @@ public sealed class GroupMentionHandler
     {
         switch (command.ToLowerInvariant())
         {
-            case "random map":
+            case "randommap":
                 await HandleRandomMapAsync(bot, message, cancellationToken);
                 break;
+
             default:
                 break;
         }

@@ -9,13 +9,13 @@ public sealed class UpdateHandler : IUpdateHandler
 {
     private readonly BotSettings _settings;
     private readonly BotUsernameProvider _usernameProvider;
-    private readonly GroupMentionHandler _mentionHandler;
+    private readonly GroupCommandHandler _mentionHandler;
     private readonly ILogger<UpdateHandler> _logger;
 
     public UpdateHandler(
         BotSettings settings,
         BotUsernameProvider usernameProvider,
-        GroupMentionHandler mentionHandler,
+        GroupCommandHandler mentionHandler,
         ILogger<UpdateHandler> logger)
     {
         _settings = settings;
@@ -78,7 +78,7 @@ public sealed class UpdateHandler : IUpdateHandler
     {
         var botUsername = await _usernameProvider.GetUsernameAsync(cancellationToken);
 
-        if (!MentionCommandParser.TryGetCommand(message, botUsername, out var command))
+        if (!CommandParser.TryGetCommand(message, botUsername, out var command))
         {
             return;
         }
