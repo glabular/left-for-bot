@@ -1,0 +1,11 @@
+# Build
+[Bb]in/
+[Oo]bj/
+
+# Visual Studio
+.vs/
+*.user
+*.suo
+
+# NuGet (legacy packages.config)
+packages/
