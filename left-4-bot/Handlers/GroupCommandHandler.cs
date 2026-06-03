@@ -32,7 +32,7 @@ public sealed class GroupCommandHandler
 
         await bot.SendMessage(
             message.Chat.Id,
-            campaign,
+            campaign.DisplayName,
             cancellationToken: cancellationToken);
     }
 }

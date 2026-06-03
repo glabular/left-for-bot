@@ -2,21 +2,21 @@
 
 public static class L4d2Campaigns
 {
-    public static readonly string[] All =
+    public static readonly L4d2Campaign[] All =
     [
-        "Dead Center",
-        "Dark Carnival",
-        "Swamp Fever",
-        "Hard Rain",
-        "The Parish",
-        "The Passing",
-        "The Sacrifice",
-        "Cold Stream",
-        "The Last Stand",
-        "No Mercy",
-        "Crash Course",
-        "Death Toll",
-        "Dead Air",
-        "Blood Harvest",
+        new("Dead Center", "Вымерший центр"),
+        new("Dark Carnival", "Мрачный карнавал"),
+        new("Swamp Fever", "Болотная лихорадка"),
+        new("Hard Rain", "Ужасный ливень"),
+        new("The Parish", "Приход"),
+        new("The Passing", "Переход"),
+        new("The Sacrifice", "Жертва"),
+        new("Cold Stream", "Холодный ручей"),
+        new("The Last Stand", "Последний рубеж"),
+        new("No Mercy", "Нет милосердию"),
+        new("Crash Course", "Роковой полёт"),
+        new("Death Toll", "Похоронный звон"),
+        new("Dead Air", "Смерть в воздухе"),
+        new("Blood Harvest", "Кровавая жатва"),
     ];
 }
