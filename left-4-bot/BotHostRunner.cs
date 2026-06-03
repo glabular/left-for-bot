@@ -1,4 +1,5 @@
 ﻿using left_4_bot.Handlers;
+using left_4_bot.L4D2;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -13,6 +14,9 @@ public static class BotHostRunner
         var builder = Host.CreateApplicationBuilder();
 
         builder.Configuration.AddUserSecrets(typeof(Program).Assembly);
+        builder.Services.Configure<GoldenPoolOptions>(
+            builder.Configuration.GetSection("GoldenPool"));
+        builder.Services.AddSingleton<GoldenPoolService>();
         builder.Services.AddSingleton(settings);
         builder.Services.AddSingleton<ITelegramBotClient>(_ => new TelegramBotClient(settings.Token));
         builder.Services.AddHostedService<TelegramBotHostedService>();
