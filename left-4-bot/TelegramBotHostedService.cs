@@ -1,4 +1,6 @@
-﻿using Microsoft.Extensions.Hosting;
+﻿using left_4_bot.Handlers;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Telegram.Bot;
 using Telegram.Bot.Polling;
@@ -9,13 +11,16 @@ namespace left_4_bot;
 public sealed class TelegramBotHostedService : BackgroundService
 {
     private readonly ITelegramBotClient _bot;
+    private readonly IServiceProvider _services;
     private readonly ILogger<TelegramBotHostedService> _logger;
 
     public TelegramBotHostedService(
         ITelegramBotClient bot,
+        IServiceProvider services,
         ILogger<TelegramBotHostedService> logger)
     {
         _bot = bot;
+        _services = services;
         _logger = logger;
     }
 
@@ -31,12 +36,23 @@ public sealed class TelegramBotHostedService : BackgroundService
         };
 
         _bot.StartReceiving(
-            updateHandler: (_, _, _) => Task.CompletedTask,
+            updateHandler: HandleUpdateAsync,
             errorHandler: HandlePollingErrorAsync,
             receiverOptions: receiverOptions,
             cancellationToken: stoppingToken);
 
         await Task.Delay(Timeout.Infinite, stoppingToken);
+    }
+
+    private async Task HandleUpdateAsync(
+        ITelegramBotClient bot,
+        Telegram.Bot.Types.Update update,
+        CancellationToken cancellationToken)
+    {
+        using var scope = _services.CreateScope();
+        var handler = scope.ServiceProvider.GetRequiredService<UpdateHandler>();
+
+        await handler.HandleUpdateAsync(bot, update, cancellationToken);
     }
 
     private Task HandlePollingErrorAsync(
@@ -49,4 +65,3 @@ public sealed class TelegramBotHostedService : BackgroundService
         return Task.CompletedTask;
     }
 }
-
