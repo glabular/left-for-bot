@@ -14,6 +14,7 @@ public static class BotHostRunner
         builder.Configuration.AddUserSecrets(typeof(Program).Assembly);
         builder.Services.AddSingleton(settings);
         builder.Services.AddSingleton<ITelegramBotClient>(_ => new TelegramBotClient(settings.Token));
+        builder.Services.AddHostedService<TelegramBotHostedService>();
 
         var host = builder.Build();
 
