@@ -6,6 +6,7 @@
     <RootNamespace>left_4_bot</RootNamespace>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+    <UserSecretsId>fd88bcde-4ec3-469b-b872-c634e6827a0d</UserSecretsId>
   </PropertyGroup>
 
 	<ItemGroup>
