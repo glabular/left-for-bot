@@ -1,4 +1,5 @@
-﻿using Microsoft.Extensions.Configuration;
+﻿using left_4_bot.Handlers;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Telegram.Bot;
@@ -15,7 +16,9 @@ public static class BotHostRunner
         builder.Services.AddSingleton(settings);
         builder.Services.AddSingleton<ITelegramBotClient>(_ => new TelegramBotClient(settings.Token));
         builder.Services.AddHostedService<TelegramBotHostedService>();
-        builder.Services.AddTransient<Handlers.UpdateHandler>();
+        builder.Services.AddTransient<UpdateHandler>();
+        builder.Services.AddSingleton<BotUsernameProvider>();
+        builder.Services.AddTransient<GroupMentionHandler>();
 
         var host = builder.Build();
 
