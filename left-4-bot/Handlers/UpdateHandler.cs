@@ -8,22 +8,30 @@ namespace left_4_bot.Handlers;
 public sealed class UpdateHandler : IUpdateHandler
 {
     private readonly BotSettings _settings;
+    private readonly BotUsernameProvider _usernameProvider;
+    private readonly GroupMentionHandler _mentionHandler;
     private readonly ILogger<UpdateHandler> _logger;
 
-    public UpdateHandler(BotSettings settings, ILogger<UpdateHandler> logger)
+    public UpdateHandler(
+        BotSettings settings,
+        BotUsernameProvider usernameProvider,
+        GroupMentionHandler mentionHandler,
+        ILogger<UpdateHandler> logger)
     {
         _settings = settings;
+        _usernameProvider = usernameProvider;
+        _mentionHandler = mentionHandler;
         _logger = logger;
     }
 
-    public Task HandleUpdateAsync(
+    public async Task HandleUpdateAsync(
         ITelegramBotClient bot,
         Update update,
         CancellationToken cancellationToken)
     {
         if (update.Message is not { } message)
         {
-            return Task.CompletedTask;
+            return;
         }
 
         if (_settings.GroupChatId == 0)
@@ -34,7 +42,7 @@ public sealed class UpdateHandler : IUpdateHandler
                 message.Chat.Type,
                 message.Text);
 
-            return Task.CompletedTask;
+            return;
         }
 
         if (message.Chat.Id != _settings.GroupChatId)
@@ -43,13 +51,13 @@ public sealed class UpdateHandler : IUpdateHandler
                 "Ignored message from chat {ChatId}.",
                 message.Chat.Id);
 
-            return Task.CompletedTask;
+            return;
         }
 
         var user = message.From?.Username ?? message.From?.FirstName ?? "unknown";
         _logger.LogInformation("Group message from {User}: {Text}", user, message.Text);
 
-        return HandleGroupMessageAsync(message, cancellationToken);
+        await HandleGroupMessageAsync(bot, message, cancellationToken);
     }
 
     public Task HandleErrorAsync(
@@ -63,8 +71,18 @@ public sealed class UpdateHandler : IUpdateHandler
         return Task.CompletedTask;
     }
 
-    private Task HandleGroupMessageAsync(Message message, CancellationToken cancellationToken)
+    private async Task HandleGroupMessageAsync(
+        ITelegramBotClient bot,
+        Message message,
+        CancellationToken cancellationToken)
     {
-        return Task.CompletedTask;
+        var botUsername = await _usernameProvider.GetUsernameAsync(cancellationToken);
+
+        if (!MentionCommandParser.TryGetCommand(message, botUsername, out var command))
+        {
+            return;
+        }
+
+        await _mentionHandler.HandleAsync(bot, message, command, cancellationToken);
     }
 }
