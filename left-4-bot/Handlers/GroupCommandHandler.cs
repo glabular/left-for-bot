@@ -38,6 +38,10 @@ public sealed class GroupCommandHandler
                 await HandleRandomMapAsync(bot, message, cancellationToken);
                 break;
 
+            case "favmaps":
+                await HandleFavMapsAsync(bot, message, cancellationToken);
+                break;
+
             default:
                 break;
         }
@@ -55,6 +59,35 @@ public sealed class GroupCommandHandler
             : campaign.Value.DisplayName;
 
         await bot.SendMessage(message.Chat.Id, text, cancellationToken: cancellationToken);
+    }
+
+    private async Task HandleFavMapsAsync(
+        ITelegramBotClient bot,
+        Message message,
+        CancellationToken cancellationToken)
+    {
+        var campaigns = _goldenPool.GetCampaigns();
+
+        if (campaigns.Count == 0)
+        {
+            await bot.SendMessage(
+                message.Chat.Id,
+                "Золотой пул пуст.\n\nИспользуйте /addmap <название на английском>\n\nНапример:\n    /addmap Dark Carnival",
+                cancellationToken: cancellationToken);
+            return;
+        }
+
+        var lines = new List<string> { $"Золотой пул ({campaigns.Count}):" };
+
+        for (var i = 0; i < campaigns.Count; i++)
+        {
+            lines.Add($"{i + 1}. {campaigns[i].DisplayName}");
+        }
+
+        await bot.SendMessage(
+            message.Chat.Id,
+            string.Join('\n', lines),
+            cancellationToken: cancellationToken);
     }
 
     private async Task HandleAddMapAsync(
