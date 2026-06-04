@@ -6,6 +6,19 @@ namespace left_4_bot.Handlers;
 
 public sealed class GroupCommandHandler
 {
+    private const string HelpText =
+        """
+        Команды:
+        /map — случайная карта из любимых
+        /favmaps — список любимых карт
+        /addmap <англ.> — добавить в любимые
+        /removemap <англ.> — удалить из любимых
+        /randommap — случайная карта из всех
+        /help — справка
+
+        Названия кампаний — на английском (например: Dark Carnival)
+        """;
+
     private readonly GoldenPoolService _goldenPool;
 
     public GroupCommandHandler(GoldenPoolService goldenPool)
@@ -40,6 +53,10 @@ public sealed class GroupCommandHandler
 
             case "favmaps":
                 await HandleFavMapsAsync(bot, message, cancellationToken);
+                break;
+
+            case "help":
+                await HandleHelpAsync(bot, message, cancellationToken);
                 break;
 
             default:
@@ -166,6 +183,17 @@ public sealed class GroupCommandHandler
         await bot.SendMessage(
             message.Chat.Id,
             campaign.DisplayName,
+            cancellationToken: cancellationToken);
+    }
+
+    private static async Task HandleHelpAsync(
+        ITelegramBotClient bot,
+        Message message,
+        CancellationToken cancellationToken)
+    {
+        await bot.SendMessage(
+            message.Chat.Id,
+            HelpText,
             cancellationToken: cancellationToken);
     }
 }
