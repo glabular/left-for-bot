@@ -51,7 +51,7 @@ public sealed class GroupCommandHandler
         var campaign = GoldenPoolPicker.Pick(_goldenPool);
 
         var text = campaign is null
-            ? "Golden pool is empty. Use /addmap <English name>."
+            ? "Золотой пул пуст.\n\nИспользуйте /addmap <название на английском>\n\nНапример:\n    /addmap Dark Carnival"
             : campaign.Value.DisplayName;
 
         await bot.SendMessage(message.Chat.Id, text, cancellationToken: cancellationToken);
@@ -67,7 +67,7 @@ public sealed class GroupCommandHandler
         {
             await bot.SendMessage(
                 message.Chat.Id,
-                "Usage: /addmap <English name>  e.g. /addmap Dark Carnival",
+                "Использование: /addmap <название на английском>\n\nНапример:\n    /addmap Dark Carnival",
                 cancellationToken: cancellationToken);
             return;
         }
@@ -77,14 +77,14 @@ public sealed class GroupCommandHandler
         var text = result switch
         {
             GoldenPoolService.AddResult.Added when CampaignCatalog.TryGetByEnglishName(args, out var c)
-                => $"Added to golden pool: {c.DisplayName}",
+                => $"Добавлено в золотой пул: {c.DisplayName}",
             GoldenPoolService.AddResult.AlreadyExists when CampaignCatalog.TryGetByEnglishName(args, out var c)
-                => $"Already in golden pool: {c.DisplayName}",
+                => $"Уже в золотом пуле: {c.DisplayName}",
             GoldenPoolService.AddResult.UnknownCampaign
-                => $"Unknown campaign: {args}",
+                => $"Неизвестная кампания: {args}",
             GoldenPoolService.AddResult.SaveFailed
-                => "Failed to save golden pool to appsettings.json.",
-            _ => "Could not add campaign."
+                => "Не удалось сохранить золотой пул в appsettings.json.",
+            _ => "Не удалось добавить кампанию."
         };
 
         await bot.SendMessage(message.Chat.Id, text, cancellationToken: cancellationToken);
@@ -100,7 +100,7 @@ public sealed class GroupCommandHandler
         {
             await bot.SendMessage(
                 message.Chat.Id,
-                "Usage: /removemap <English name>  e.g. /removemap Dark Carnival",
+                "Использование: /removemap <название на английском>\n\nНапример:\n    /removemap Dark Carnival",
                 cancellationToken: cancellationToken);
             return;
         }
@@ -110,14 +110,14 @@ public sealed class GroupCommandHandler
         var text = result switch
         {
             GoldenPoolService.RemoveResult.Removed when CampaignCatalog.TryGetByEnglishName(args, out var c)
-                => $"Removed from golden pool: {c.DisplayName}",
+                => $"Удалено из золотого пула: {c.DisplayName}",
             GoldenPoolService.RemoveResult.NotInPool when CampaignCatalog.TryGetByEnglishName(args, out var c)
-                => $"Not in golden pool: {c.DisplayName}",
+                => $"Нет в золотом пуле: {c.DisplayName}",
             GoldenPoolService.RemoveResult.UnknownCampaign
-                => $"Unknown campaign: {args}",
+                => $"Неизвестная кампания: {args}",
             GoldenPoolService.RemoveResult.SaveFailed
-                => "Failed to save golden pool to appsettings.json.",
-            _ => "Could not remove campaign."
+                => "Не удалось сохранить золотой пул в appsettings.json.",
+            _ => "Не удалось удалить кампанию."
         };
 
         await bot.SendMessage(message.Chat.Id, text, cancellationToken: cancellationToken);
