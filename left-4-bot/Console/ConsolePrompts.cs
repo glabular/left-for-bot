@@ -26,7 +26,7 @@ public static class ConsolePrompts
 
     public static string MaskToken(string token)
     {
-        if (string.IsNullOrEmpty(token))
+        if (string.IsNullOrWhiteSpace(token))
         {
             return "(not set)";
         }
