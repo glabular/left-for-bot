@@ -1,4 +1,5 @@
-﻿using Microsoft.Extensions.Logging;
+﻿using left_4_bot;
+using Microsoft.Extensions.Logging;
 using Telegram.Bot;
 using Telegram.Bot.Polling;
 using Telegram.Bot.Types;
@@ -9,18 +10,18 @@ public sealed class UpdateHandler : IUpdateHandler
 {
     private readonly BotSettings _settings;
     private readonly BotUsernameProvider _usernameProvider;
-    private readonly GroupCommandHandler _mentionHandler;
+    private readonly GroupCommandHandler _commandHandler;
     private readonly ILogger<UpdateHandler> _logger;
 
     public UpdateHandler(
         BotSettings settings,
         BotUsernameProvider usernameProvider,
-        GroupCommandHandler mentionHandler,
+        GroupCommandHandler commandHandler,
         ILogger<UpdateHandler> logger)
     {
         _settings = settings;
         _usernameProvider = usernameProvider;
-        _mentionHandler = mentionHandler;
+        _commandHandler = commandHandler;
         _logger = logger;
     }
 
@@ -78,11 +79,11 @@ public sealed class UpdateHandler : IUpdateHandler
     {
         var botUsername = await _usernameProvider.GetUsernameAsync(cancellationToken);
 
-        if (!CommandParser.TryGetCommand(message, botUsername, out var command))
+        if (!CommandParser.TryGetCommand(message, botUsername, out var command, out var args))
         {
             return;
         }
 
-        await _mentionHandler.HandleAsync(bot, message, command, cancellationToken);
+        await _commandHandler.HandleAsync(bot, message, command, args, cancellationToken);
     }
 }
