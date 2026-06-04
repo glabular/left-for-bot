@@ -82,6 +82,8 @@ public sealed class GroupCommandHandler
                 => $"Already in golden pool: {c.DisplayName}",
             GoldenPoolService.AddResult.UnknownCampaign
                 => $"Unknown campaign: {args}",
+            GoldenPoolService.AddResult.SaveFailed
+                => "Failed to save golden pool to appsettings.json.",
             _ => "Could not add campaign."
         };
 
@@ -113,6 +115,8 @@ public sealed class GroupCommandHandler
                 => $"Not in golden pool: {c.DisplayName}",
             GoldenPoolService.RemoveResult.UnknownCampaign
                 => $"Unknown campaign: {args}",
+            GoldenPoolService.RemoveResult.SaveFailed
+                => "Failed to save golden pool to appsettings.json.",
             _ => "Could not remove campaign."
         };
 

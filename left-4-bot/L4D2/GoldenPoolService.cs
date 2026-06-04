@@ -1,18 +1,29 @@
 ﻿using System.Text.Json;
 using System.Text.Json.Nodes;
-using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
 
 namespace left_4_bot.L4D2;
 
 public sealed class GoldenPoolService
 {
-    private readonly string _appsettingsPath;
+    private static readonly JsonDocumentOptions JsonReadOptions = new()
+    {
+        AllowTrailingCommas = true,
+    };
+
+    private static readonly JsonSerializerOptions JsonWriteOptions = new()
+    {
+        WriteIndented = true,
+    };
+
+    private readonly string _projectAppSettingsPath;
+    private readonly string _runtimeAppSettingsPath;
     private List<string> _campaignNames;
 
-    public GoldenPoolService(IOptions<GoldenPoolOptions> options, IHostEnvironment environment)
+    public GoldenPoolService(IOptions<GoldenPoolOptions> options)
     {
-        _appsettingsPath = Path.Combine(environment.ContentRootPath, "appsettings.json");
+        _projectAppSettingsPath = AppSettingsPathResolver.ResolveProjectAppSettingsPath();
+        _runtimeAppSettingsPath = AppSettingsPathResolver.ResolveRuntimeAppSettingsPath();
         _campaignNames = new List<string>(options.Value.Campaigns);
     }
 
@@ -47,7 +58,13 @@ public sealed class GoldenPoolService
         }
 
         _campaignNames.Add(campaign.EnglishName);
-        Save();
+
+        if (!TrySave())
+        {
+            _campaignNames.RemoveAt(_campaignNames.Count - 1);
+            return AddResult.SaveFailed;
+        }
+
         return AddResult.Added;
     }
 
@@ -66,45 +83,82 @@ public sealed class GoldenPoolService
             return RemoveResult.NotInPool;
         }
 
+        var removedName = _campaignNames[index];
         _campaignNames.RemoveAt(index);
-        Save();
+
+        if (!TrySave())
+        {
+            _campaignNames.Insert(index, removedName);
+            return RemoveResult.SaveFailed;
+        }
 
         return RemoveResult.Removed;
     }
 
-    private void Save()
+    private bool TrySave()
     {
-        var json = File.ReadAllText(_appsettingsPath);
-        var root = JsonNode.Parse(json)?.AsObject()
-            ?? throw new InvalidOperationException("Failed to parse appsettings.json.");
-
-        var campaignsArray = new JsonArray();
-
-        foreach (var name in _campaignNames)
+        try
         {
-            campaignsArray.Add(name);
+            var readPath = File.Exists(_projectAppSettingsPath)
+                ? _projectAppSettingsPath
+                : _runtimeAppSettingsPath;
+
+            JsonObject root;
+
+            if (File.Exists(readPath))
+            {
+                var json = File.ReadAllText(readPath);
+                root = JsonNode.Parse(json, documentOptions: JsonReadOptions)?.AsObject()
+                    ?? new JsonObject();
+            }
+            else
+            {
+                root = new JsonObject();
+            }
+
+            var campaignsArray = new JsonArray();
+
+            foreach (var name in _campaignNames)
+            {
+                campaignsArray.Add(name);
+            }
+
+            root["GoldenPool"] = new JsonObject
+            {
+                ["Campaigns"] = campaignsArray
+            };
+
+            var output = root.ToJsonString(JsonWriteOptions);
+
+            File.WriteAllText(_projectAppSettingsPath, output);
+
+            if (!string.Equals(_projectAppSettingsPath, _runtimeAppSettingsPath, StringComparison.OrdinalIgnoreCase)
+                && File.Exists(_runtimeAppSettingsPath))
+            {
+                File.WriteAllText(_runtimeAppSettingsPath, output);
+            }
+
+            return true;
         }
-
-        root["GoldenPool"] = new JsonObject
+        catch (Exception ex) when (ex is JsonException or IOException)
         {
-            ["Campaigns"] = campaignsArray
-        };
-
-        var output = root.ToJsonString(new JsonSerializerOptions { WriteIndented = true });
-        File.WriteAllText(_appsettingsPath, output);
+            return false;
+        }
     }
 
     public enum AddResult
     {
         Added,
         AlreadyExists,
-        UnknownCampaign
+        UnknownCampaign,
+        SaveFailed,
     }
 
     public enum RemoveResult
     {
         Removed,
         NotInPool,
-        UnknownCampaign
+        UnknownCampaign,
+        SaveFailed,
     }
 }
