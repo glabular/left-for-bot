@@ -4,9 +4,14 @@ namespace left_4_bot.Handlers;
 
 public static class CommandParser
 {
-    public static bool TryGetCommand(Message message, string botUsername, out string command)
+    public static bool TryGetCommand(
+        Message message,
+        string botUsername,
+        out string command,
+        out string args)
     {
         command = string.Empty;
+        args = string.Empty;
 
         if (string.IsNullOrWhiteSpace(message.Text))
         {
@@ -24,6 +29,11 @@ public static class CommandParser
 
         var spaceIndex = text.IndexOf(' ');
         var firstToken = (spaceIndex >= 0 ? text[..spaceIndex] : text).Trim();
+
+        if (spaceIndex >= 0)
+        {
+            args = text[(spaceIndex + 1)..].Trim();
+        }
 
         if (firstToken.Length == 0)
         {
