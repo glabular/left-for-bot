@@ -10,9 +10,15 @@ namespace left_4_bot;
 
 public sealed class TelegramBotHostedService : BackgroundService
 {
+    private static readonly TimeSpan InitialBackoff = TimeSpan.FromSeconds(2);
+    private static readonly TimeSpan MaxBackoff = TimeSpan.FromSeconds(60);
+
     private readonly ITelegramBotClient _bot;
     private readonly IServiceProvider _services;
     private readonly ILogger<TelegramBotHostedService> _logger;
+
+    private TimeSpan _currentBackoff = InitialBackoff;
+    private bool _wasDisconnected;
 
     public TelegramBotHostedService(
         ITelegramBotClient bot,
@@ -35,13 +41,29 @@ public sealed class TelegramBotHostedService : BackgroundService
             AllowedUpdates = Array.Empty<UpdateType>()
         };
 
-        _bot.StartReceiving(
-            updateHandler: HandleUpdateAsync,
-            errorHandler: HandlePollingErrorAsync,
-            receiverOptions: receiverOptions,
-            cancellationToken: stoppingToken);
+        _ = RunRecoveryProbeAsync(stoppingToken);
 
-        await Task.Delay(Timeout.Infinite, stoppingToken);
+        while (!stoppingToken.IsCancellationRequested)
+        {
+            try
+            {
+                await _bot.ReceiveAsync(
+                    updateHandler: HandleUpdateAsync,
+                    errorHandler: HandlePollingErrorAsync,
+                    receiverOptions: receiverOptions,
+                    cancellationToken: stoppingToken);
+
+                break;
+            }
+            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+            {
+                break;
+            }
+            catch (Exception exception)
+            {
+                await HandleReceiverCrashAsync(exception, stoppingToken);
+            }
+        }
     }
 
     private async Task HandleUpdateAsync(
@@ -49,19 +71,95 @@ public sealed class TelegramBotHostedService : BackgroundService
         Telegram.Bot.Types.Update update,
         CancellationToken cancellationToken)
     {
+        NotifyConnectionRestoredIfNeeded();
+
         using var scope = _services.CreateScope();
         var handler = scope.ServiceProvider.GetRequiredService<UpdateHandler>();
 
         await handler.HandleUpdateAsync(bot, update, cancellationToken);
     }
 
-    private Task HandlePollingErrorAsync(
+    private async Task HandlePollingErrorAsync(
         ITelegramBotClient bot,
         Exception exception,
         CancellationToken cancellationToken)
     {
         _logger.LogError(exception, "Telegram polling error.");
 
-        return Task.CompletedTask;
+        if (!TelegramNetworkErrorClassifier.IsTransientNetworkError(exception))
+        {
+            return;
+        }
+
+        _wasDisconnected = true;
+
+        await Task.Delay(_currentBackoff, cancellationToken);
+
+        _currentBackoff = TimeSpan.FromSeconds(
+            Math.Min(_currentBackoff.TotalSeconds * 2, MaxBackoff.TotalSeconds));
+    }
+
+    private async Task HandleReceiverCrashAsync(
+        Exception exception,
+        CancellationToken cancellationToken)
+    {
+        _logger.LogError(exception, "Telegram receiver crashed unexpectedly.");
+
+        if (!TelegramNetworkErrorClassifier.IsTransientNetworkError(exception))
+        {
+            return;
+        }
+
+        _wasDisconnected = true;
+
+        await Task.Delay(_currentBackoff, cancellationToken);
+
+        _currentBackoff = TimeSpan.FromSeconds(
+            Math.Min(_currentBackoff.TotalSeconds * 2, MaxBackoff.TotalSeconds));
+    }
+
+    private async Task RunRecoveryProbeAsync(CancellationToken stoppingToken)
+    {
+        using var timer = new PeriodicTimer(TimeSpan.FromSeconds(5));
+
+        try
+        {
+            while (await timer.WaitForNextTickAsync(stoppingToken))
+            {
+                if (!_wasDisconnected)
+                {
+                    continue;
+                }
+
+                try
+                {
+                    await _bot.GetMe(cancellationToken: stoppingToken);
+                    NotifyConnectionRestoredIfNeeded();
+                }
+                catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+                {
+                    break;
+                }
+                catch
+                {
+                    // Polling error handler logs active failures with backoff.
+                }
+            }
+        }
+        catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+        {
+        }
+    }
+
+    private void NotifyConnectionRestoredIfNeeded()
+    {
+        if (!_wasDisconnected)
+        {
+            return;
+        }
+
+        _logger.LogInformation("Telegram connection restored.");
+        _wasDisconnected = false;
+        _currentBackoff = InitialBackoff;
     }
 }
