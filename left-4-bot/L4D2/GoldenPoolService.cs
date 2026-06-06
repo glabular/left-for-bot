@@ -19,6 +19,7 @@ public sealed class GoldenPoolService
     private readonly string _projectAppSettingsPath;
     private readonly string _runtimeAppSettingsPath;
     private List<string> _campaignNames;
+    private readonly object _sync = new();
 
     public GoldenPoolService(IOptions<GoldenPoolOptions> options)
     {
@@ -29,70 +30,84 @@ public sealed class GoldenPoolService
 
     public IReadOnlyList<L4d2Campaign> GetCampaigns()
     {
-        var result = new List<L4d2Campaign>();
-
-        foreach (var name in _campaignNames)
+        lock (_sync)
         {
-            if (CampaignCatalog.TryGetByEnglishName(name, out var campaign))
-            {
-                result.Add(campaign);
-            }
-        }
+            var result = new List<L4d2Campaign>();
 
-        return result;
+            foreach (var name in _campaignNames)
+            {
+                if (CampaignCatalog.TryGetByEnglishName(name, out var campaign))
+                {
+                    result.Add(campaign);
+                }
+            }
+
+            return result;
+        }
     }
 
-    public bool Contains(string englishName) =>
-        _campaignNames.Any(n => n.Equals(englishName, StringComparison.OrdinalIgnoreCase));
+    public bool Contains(string englishName)
+    {
+        lock (_sync)
+        {
+            return _campaignNames.Any(n => n.Equals(englishName, StringComparison.OrdinalIgnoreCase));
+        }
+    }
 
     public AddResult TryAdd(string englishName)
     {
-        if (!CampaignCatalog.TryGetByEnglishName(englishName, out var campaign))
+        lock (_sync)
         {
-            return AddResult.UnknownCampaign;
+            if (!CampaignCatalog.TryGetByEnglishName(englishName, out var campaign))
+            {
+                return AddResult.UnknownCampaign;
+            }
+
+            if (Contains(campaign.EnglishName))
+            {
+                return AddResult.AlreadyExists;
+            }
+
+            _campaignNames.Add(campaign.EnglishName);
+
+            if (!TrySave())
+            {
+                _campaignNames.RemoveAt(_campaignNames.Count - 1);
+                return AddResult.SaveFailed;
+            }
+
+            return AddResult.Added;
         }
-
-        if (Contains(campaign.EnglishName))
-        {
-            return AddResult.AlreadyExists;
-        }
-
-        _campaignNames.Add(campaign.EnglishName);
-
-        if (!TrySave())
-        {
-            _campaignNames.RemoveAt(_campaignNames.Count - 1);
-            return AddResult.SaveFailed;
-        }
-
-        return AddResult.Added;
     }
 
     public RemoveResult TryRemove(string englishName)
     {
-        if (!CampaignCatalog.TryGetByEnglishName(englishName, out var campaign))
+        lock (_sync)
         {
-            return RemoveResult.UnknownCampaign;
+            if (!CampaignCatalog.TryGetByEnglishName(englishName, out var campaign))
+            {
+                return RemoveResult.UnknownCampaign;
+            }
+
+            var index = _campaignNames.FindIndex(
+                n => n.Equals(campaign.EnglishName, StringComparison.OrdinalIgnoreCase));
+
+            if (index < 0)
+            {
+                return RemoveResult.NotInPool;
+            }
+
+            var removedName = _campaignNames[index];
+            _campaignNames.RemoveAt(index);
+
+            if (!TrySave())
+            {
+                _campaignNames.Insert(index, removedName);
+                return RemoveResult.SaveFailed;
+            }
+
+            return RemoveResult.Removed;
         }
-
-        var index = _campaignNames.FindIndex(
-            n => n.Equals(campaign.EnglishName, StringComparison.OrdinalIgnoreCase));
-
-        if (index < 0)
-        {
-            return RemoveResult.NotInPool;
-        }
-
-        var removedName = _campaignNames[index];
-        _campaignNames.RemoveAt(index);
-
-        if (!TrySave())
-        {
-            _campaignNames.Insert(index, removedName);
-            return RemoveResult.SaveFailed;
-        }
-
-        return RemoveResult.Removed;
     }
 
     private bool TrySave()
