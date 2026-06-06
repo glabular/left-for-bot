@@ -19,8 +19,9 @@ public sealed class GroupCommandHandler
         Названия кампаний — на английском (например: Dark Carnival)
         """;
 
-    private const string EditLimitExceededText =
-        "Превышен дневной лимит изменений золотого пула (3 в день). Слишком много правок списка сегодня — попробуйте завтра.";
+    private static string EditLimitExceededText =>
+        $"Превышен дневной лимит изменений золотого пула ({GoldenPoolEditLimiter.DailyLimit} в день). "
+        + "Слишком много правок списка сегодня — попробуйте завтра.";
 
     private readonly GoldenPoolService _goldenPool;
     private readonly GoldenPoolEditLimiter _editLimiter;

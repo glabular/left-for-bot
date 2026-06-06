@@ -4,7 +4,7 @@ namespace left_4_bot.L4D2;
 
 public sealed class GoldenPoolEditLimiter
 {
-    private const int DailyLimit = 3;
+    public const int DailyLimit = 3;
 
     private readonly ConcurrentDictionary<long, DailyEditCount> _counts = new();
     private readonly ConcurrentDictionary<long, object> _userLocks = new();
