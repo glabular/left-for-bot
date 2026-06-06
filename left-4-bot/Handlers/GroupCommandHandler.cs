@@ -127,17 +127,24 @@ public sealed class GroupCommandHandler
             return;
         }
 
-        if (message.From?.Id is { } userId && !_editLimiter.CanEdit(userId))
+        GoldenPoolService.AddResult result;
+
+        if (message.From?.Id is { } userId)
         {
-            await bot.SendMessage(message.Chat.Id, EditLimitExceededText, cancellationToken: cancellationToken);
-            return;
+            result = default;
+            if (!_editLimiter.TryApplyEdit(userId, () =>
+            {
+                result = _goldenPool.TryAdd(args);
+                return result == GoldenPoolService.AddResult.Added;
+            }))
+            {
+                await bot.SendMessage(message.Chat.Id, EditLimitExceededText, cancellationToken: cancellationToken);
+                return;
+            }
         }
-
-        var result = _goldenPool.TryAdd(args);
-
-        if (result == GoldenPoolService.AddResult.Added && message.From?.Id is { } addedByUserId)
+        else
         {
-            _editLimiter.RecordEdit(addedByUserId);
+            result = _goldenPool.TryAdd(args);
         }
 
         var text = result switch
@@ -171,17 +178,24 @@ public sealed class GroupCommandHandler
             return;
         }
 
-        if (message.From?.Id is { } userId && !_editLimiter.CanEdit(userId))
+        GoldenPoolService.RemoveResult result;
+
+        if (message.From?.Id is { } userId)
         {
-            await bot.SendMessage(message.Chat.Id, EditLimitExceededText, cancellationToken: cancellationToken);
-            return;
+            result = default;
+            if (!_editLimiter.TryApplyEdit(userId, () =>
+            {
+                result = _goldenPool.TryRemove(args);
+                return result == GoldenPoolService.RemoveResult.Removed;
+            }))
+            {
+                await bot.SendMessage(message.Chat.Id, EditLimitExceededText, cancellationToken: cancellationToken);
+                return;
+            }
         }
-
-        var result = _goldenPool.TryRemove(args);
-
-        if (result == GoldenPoolService.RemoveResult.Removed && message.From?.Id is { } removedByUserId)
+        else
         {
-            _editLimiter.RecordEdit(removedByUserId);
+            result = _goldenPool.TryRemove(args);
         }
 
         var text = result switch
