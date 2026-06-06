@@ -6,8 +6,16 @@ public static class RandomCampaignPicker
 {
     public static L4d2Campaign Pick()
     {
-        var index = RandomNumberGenerator.GetInt32(L4d2Campaigns.All.Length);
+        return PickFrom(L4d2Campaigns.All)!.Value;
+    }
 
-        return L4d2Campaigns.All[index];
+    public static L4d2Campaign? PickFrom(IReadOnlyList<L4d2Campaign> campaigns)
+    {
+        if (campaigns.Count == 0)
+        {
+            return null;
+        }
+
+        return campaigns[RandomNumberGenerator.GetInt32(campaigns.Count)];
     }
 }

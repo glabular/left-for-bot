@@ -78,7 +78,7 @@ public sealed class GroupCommandHandler
         Message message,
         CancellationToken cancellationToken)
     {
-        var campaign = GoldenPoolPicker.Pick(_goldenPool);
+        var campaign = RandomCampaignPicker.PickFrom(_goldenPool.GetCampaigns());
 
         var text = campaign is null
             ? EmptyPoolText
