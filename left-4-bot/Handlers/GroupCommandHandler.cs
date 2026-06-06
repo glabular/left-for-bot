@@ -23,6 +23,9 @@ public sealed class GroupCommandHandler
         $"Превышен дневной лимит изменений золотого пула ({GoldenPoolEditLimiter.DailyLimit} в день). "
         + "Слишком много правок списка сегодня — попробуйте завтра.";
 
+    private const string EmptyPoolText =
+        "Золотой пул пуст.\n\nИспользуйте /addmap <название на английском>\n\nНапример:\n    /addmap Dark Carnival";
+
     private readonly GoldenPoolService _goldenPool;
     private readonly GoldenPoolEditLimiter _editLimiter;
 
@@ -78,7 +81,7 @@ public sealed class GroupCommandHandler
         var campaign = GoldenPoolPicker.Pick(_goldenPool);
 
         var text = campaign is null
-            ? "Золотой пул пуст.\n\nИспользуйте /addmap <название на английском>\n\nНапример:\n    /addmap Dark Carnival"
+            ? EmptyPoolText
             : campaign.Value.DisplayName;
 
         await bot.SendMessage(message.Chat.Id, text, cancellationToken: cancellationToken);
@@ -95,7 +98,7 @@ public sealed class GroupCommandHandler
         {
             await bot.SendMessage(
                 message.Chat.Id,
-                "Золотой пул пуст.\n\nИспользуйте /addmap <название на английском>\n\nНапример:\n    /addmap Dark Carnival",
+                EmptyPoolText,
                 cancellationToken: cancellationToken);
             return;
         }
