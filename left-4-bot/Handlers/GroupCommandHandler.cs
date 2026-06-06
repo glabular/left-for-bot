@@ -135,7 +135,7 @@ public sealed class GroupCommandHandler
             bot,
             message,
             () => _goldenPool.TryAdd(args),
-            r => r == GoldenPoolService.AddResult.Added,
+            r => r == AddResult.Added,
             cancellationToken);
 
         if (!allowed)
@@ -145,13 +145,13 @@ public sealed class GroupCommandHandler
 
         var text = result switch
         {
-            GoldenPoolService.AddResult.Added when CampaignCatalog.TryGetByEnglishName(args, out var c)
+            AddResult.Added when CampaignCatalog.TryGetByEnglishName(args, out var c)
                 => $"Добавлено в золотой пул: {c.DisplayName}",
-            GoldenPoolService.AddResult.AlreadyExists when CampaignCatalog.TryGetByEnglishName(args, out var c)
+            AddResult.AlreadyExists when CampaignCatalog.TryGetByEnglishName(args, out var c)
                 => $"Уже в золотом пуле: {c.DisplayName}",
-            GoldenPoolService.AddResult.UnknownCampaign
+            AddResult.UnknownCampaign
                 => $"Неизвестная кампания: {args}",
-            GoldenPoolService.AddResult.SaveFailed
+            AddResult.SaveFailed
                 => "Не удалось сохранить золотой пул в appsettings.json.",
             _ => "Не удалось добавить кампанию."
         };
@@ -178,7 +178,7 @@ public sealed class GroupCommandHandler
             bot,
             message,
             () => _goldenPool.TryRemove(args),
-            r => r == GoldenPoolService.RemoveResult.Removed,
+            r => r == RemoveResult.Removed,
             cancellationToken);
 
         if (!allowed)
@@ -188,13 +188,13 @@ public sealed class GroupCommandHandler
 
         var text = result switch
         {
-            GoldenPoolService.RemoveResult.Removed when CampaignCatalog.TryGetByEnglishName(args, out var c)
+            RemoveResult.Removed when CampaignCatalog.TryGetByEnglishName(args, out var c)
                 => $"Удалено из золотого пула: {c.DisplayName}",
-            GoldenPoolService.RemoveResult.NotInPool when CampaignCatalog.TryGetByEnglishName(args, out var c)
+            RemoveResult.NotInPool when CampaignCatalog.TryGetByEnglishName(args, out var c)
                 => $"Нет в золотом пуле: {c.DisplayName}",
-            GoldenPoolService.RemoveResult.UnknownCampaign
+            RemoveResult.UnknownCampaign
                 => $"Неизвестная кампания: {args}",
-            GoldenPoolService.RemoveResult.SaveFailed
+            RemoveResult.SaveFailed
                 => "Не удалось сохранить золотой пул в appsettings.json.",
             _ => "Не удалось удалить кампанию."
         };

@@ -160,20 +160,4 @@ public sealed class GoldenPoolService
             return false;
         }
     }
-
-    public enum AddResult
-    {
-        Added,
-        AlreadyExists,
-        UnknownCampaign,
-        SaveFailed,
-    }
-
-    public enum RemoveResult
-    {
-        Removed,
-        NotInPool,
-        UnknownCampaign,
-        SaveFailed,
-    }
 }
