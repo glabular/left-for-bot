@@ -21,9 +21,9 @@ public static class BotHostRunner
         builder.Services.AddSingleton(settings);
         builder.Services.AddSingleton<ITelegramBotClient>(_ => new TelegramBotClient(settings.Token));
         builder.Services.AddHostedService<TelegramBotHostedService>();
-        builder.Services.AddTransient<UpdateHandler>();
+        builder.Services.AddSingleton<UpdateHandler>();
         builder.Services.AddSingleton<BotUsernameProvider>();
-        builder.Services.AddTransient<GroupCommandHandler>();
+        builder.Services.AddSingleton<GroupCommandHandler>();
 
         var host = builder.Build();
 
