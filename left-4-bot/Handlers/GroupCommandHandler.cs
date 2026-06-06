@@ -127,24 +127,16 @@ public sealed class GroupCommandHandler
             return;
         }
 
-        GoldenPoolService.AddResult result;
+        var (allowed, result) = await TryApplyPoolEditAsync(
+            bot,
+            message,
+            () => _goldenPool.TryAdd(args),
+            r => r == GoldenPoolService.AddResult.Added,
+            cancellationToken);
 
-        if (message.From?.Id is { } userId)
+        if (!allowed)
         {
-            result = default;
-            if (!_editLimiter.TryApplyEdit(userId, () =>
-            {
-                result = _goldenPool.TryAdd(args);
-                return result == GoldenPoolService.AddResult.Added;
-            }))
-            {
-                await bot.SendMessage(message.Chat.Id, EditLimitExceededText, cancellationToken: cancellationToken);
-                return;
-            }
-        }
-        else
-        {
-            result = _goldenPool.TryAdd(args);
+            return;
         }
 
         var text = result switch
@@ -178,24 +170,16 @@ public sealed class GroupCommandHandler
             return;
         }
 
-        GoldenPoolService.RemoveResult result;
+        var (allowed, result) = await TryApplyPoolEditAsync(
+            bot,
+            message,
+            () => _goldenPool.TryRemove(args),
+            r => r == GoldenPoolService.RemoveResult.Removed,
+            cancellationToken);
 
-        if (message.From?.Id is { } userId)
+        if (!allowed)
         {
-            result = default;
-            if (!_editLimiter.TryApplyEdit(userId, () =>
-            {
-                result = _goldenPool.TryRemove(args);
-                return result == GoldenPoolService.RemoveResult.Removed;
-            }))
-            {
-                await bot.SendMessage(message.Chat.Id, EditLimitExceededText, cancellationToken: cancellationToken);
-                return;
-            }
-        }
-        else
-        {
-            result = _goldenPool.TryRemove(args);
+            return;
         }
 
         var text = result switch
@@ -236,5 +220,31 @@ public sealed class GroupCommandHandler
             message.Chat.Id,
             HelpText,
             cancellationToken: cancellationToken);
+    }
+
+    private async Task<(bool Allowed, T Result)> TryApplyPoolEditAsync<T>(
+        ITelegramBotClient bot,
+        Message message,
+        Func<T> applyEdit,
+        Func<T, bool> editSucceeded,
+        CancellationToken cancellationToken)
+    {
+        if (message.From?.Id is not { } userId)
+        {
+            return (true, applyEdit());
+        }
+
+        T result = default!;
+        if (!_editLimiter.TryApplyEdit(userId, () =>
+        {
+            result = applyEdit();
+            return editSucceeded(result);
+        }))
+        {
+            await bot.SendMessage(message.Chat.Id, EditLimitExceededText, cancellationToken: cancellationToken);
+            return (false, default!);
+        }
+
+        return (true, result);
     }
 }
