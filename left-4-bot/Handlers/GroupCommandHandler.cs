@@ -19,11 +19,16 @@ public sealed class GroupCommandHandler
         Названия кампаний — на английском (например: Dark Carnival)
         """;
 
-    private readonly GoldenPoolService _goldenPool;
+    private const string EditLimitExceededText =
+        "Превышен дневной лимит изменений золотого пула (3 в день). Слишком много правок списка сегодня — попробуйте завтра.";
 
-    public GroupCommandHandler(GoldenPoolService goldenPool)
+    private readonly GoldenPoolService _goldenPool;
+    private readonly GoldenPoolEditLimiter _editLimiter;
+
+    public GroupCommandHandler(GoldenPoolService goldenPool, GoldenPoolEditLimiter editLimiter)
     {
         _goldenPool = goldenPool;
+        _editLimiter = editLimiter;
     }
 
     public async Task HandleAsync(
@@ -122,7 +127,18 @@ public sealed class GroupCommandHandler
             return;
         }
 
+        if (message.From?.Id is { } userId && !_editLimiter.CanEdit(userId))
+        {
+            await bot.SendMessage(message.Chat.Id, EditLimitExceededText, cancellationToken: cancellationToken);
+            return;
+        }
+
         var result = _goldenPool.TryAdd(args);
+
+        if (result == GoldenPoolService.AddResult.Added && message.From?.Id is { } addedByUserId)
+        {
+            _editLimiter.RecordEdit(addedByUserId);
+        }
 
         var text = result switch
         {
@@ -155,7 +171,18 @@ public sealed class GroupCommandHandler
             return;
         }
 
+        if (message.From?.Id is { } userId && !_editLimiter.CanEdit(userId))
+        {
+            await bot.SendMessage(message.Chat.Id, EditLimitExceededText, cancellationToken: cancellationToken);
+            return;
+        }
+
         var result = _goldenPool.TryRemove(args);
+
+        if (result == GoldenPoolService.RemoveResult.Removed && message.From?.Id is { } removedByUserId)
+        {
+            _editLimiter.RecordEdit(removedByUserId);
+        }
 
         var text = result switch
         {
