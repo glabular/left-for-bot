@@ -86,8 +86,7 @@ public sealed class TelegramBotHostedService : BackgroundService
     {
         if (TelegramNetworkErrorClassifier.IsTransientNetworkError(exception))
         {
-            NotifyConnectionProblemIfNeeded();
-            await BackoffAfterTransientErrorAsync(cancellationToken);
+            await HandleTransientNetworkErrorAsync(exception, cancellationToken);
             return;
         }
 
@@ -100,15 +99,24 @@ public sealed class TelegramBotHostedService : BackgroundService
     {
         if (TelegramNetworkErrorClassifier.IsTransientNetworkError(exception))
         {
-            NotifyConnectionProblemIfNeeded();
-            await BackoffAfterTransientErrorAsync(cancellationToken);
+            await HandleTransientNetworkErrorAsync(exception, cancellationToken);
             return;
         }
 
         _logger.LogError(exception, "Telegram receiver crashed unexpectedly.");
     }
 
-    private void NotifyConnectionProblemIfNeeded()
+    private async Task HandleTransientNetworkErrorAsync(
+        Exception exception,
+        CancellationToken cancellationToken)
+    {
+        var reason = TelegramNetworkErrorClassifier.GetShortReason(exception)!;
+        _logger.LogDebug(exception, "Telegram transient network error ({Reason}).", reason);
+        NotifyConnectionProblemIfNeeded(reason);
+        await BackoffAfterTransientErrorAsync(cancellationToken);
+    }
+
+    private void NotifyConnectionProblemIfNeeded(string reason)
     {
         if (_wasDisconnected)
         {
@@ -116,7 +124,9 @@ public sealed class TelegramBotHostedService : BackgroundService
         }
 
         _wasDisconnected = true;
-        _logger.LogWarning("Telegram connection problem; retrying with backoff.");
+        _logger.LogWarning(
+            "Telegram connection problem ({Reason}); retrying with backoff.",
+            reason);
     }
 
     private async Task BackoffAfterTransientErrorAsync(CancellationToken cancellationToken)
