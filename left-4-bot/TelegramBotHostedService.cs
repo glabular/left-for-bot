@@ -124,7 +124,7 @@ public sealed class TelegramBotHostedService : BackgroundService
         }
 
         _wasDisconnected = true;
-        _logger.LogWarning(
+        _logger.LogDebug(
             "Telegram connection problem ({Reason}); retrying with backoff.",
             reason);
     }
@@ -177,7 +177,7 @@ public sealed class TelegramBotHostedService : BackgroundService
             return;
         }
 
-        _logger.LogInformation("Telegram connection restored.");
+        _logger.LogDebug("Telegram connection restored.");
         _wasDisconnected = false;
         _currentBackoff = InitialBackoff;
     }

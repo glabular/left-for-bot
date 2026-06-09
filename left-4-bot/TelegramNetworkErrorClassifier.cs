@@ -11,13 +11,28 @@ internal static class TelegramNetworkErrorClassifier
     public static string? GetShortReason(Exception exception)
     {
         var sawTimeout = false;
+        var sawTransportFailure = false;
 
         for (var ex = exception; ex is not null; ex = ex.InnerException)
         {
-            if (ex is SocketException { SocketErrorCode: var socketError }
-                && TryGetSocketErrorReason(socketError) is { } socketReason)
+            if (ex is SocketException socket)
             {
-                return socketReason;
+                if (TryGetSocketErrorReason(socket.SocketErrorCode) is { } socketReason)
+                {
+                    return socketReason;
+                }
+
+                if (TryGetNativeErrorReason(socket.NativeErrorCode) is { } nativeReason)
+                {
+                    return nativeReason;
+                }
+
+                sawTransportFailure = true;
+            }
+
+            if (ex is IOException io && IsTransportIOException(io))
+            {
+                return "connection reset";
             }
 
             if (ex is HttpRequestException httpEx && IsNameResolutionFailure(httpEx))
@@ -31,6 +46,11 @@ internal static class TelegramNetworkErrorClassifier
             }
         }
 
+        if (HasTelegramServiceFailureWrapper(exception) && sawTransportFailure)
+        {
+            return "connection reset";
+        }
+
         return sawTimeout ? "request timed out" : null;
     }
 
@@ -42,6 +62,38 @@ internal static class TelegramNetworkErrorClassifier
         SocketError.NetworkUnreachable or SocketError.NetworkDown => "network unreachable",
         _ => null
     };
+
+    private static string? TryGetNativeErrorReason(int nativeErrorCode) => nativeErrorCode switch
+    {
+        10054 or 10053 => "connection reset",
+        11001 => "host unknown",
+        10060 => "request timed out",
+        10051 or 10050 or 10061 => "network unreachable",
+        _ => null
+    };
+
+    private static bool IsTransportIOException(IOException exception)
+    {
+        var message = exception.Message;
+
+        return message.Contains("transport connection", StringComparison.OrdinalIgnoreCase)
+            || message.Contains("forcibly closed", StringComparison.OrdinalIgnoreCase)
+            || message.Contains("разорвал", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool HasTelegramServiceFailureWrapper(Exception exception)
+    {
+        for (var ex = exception; ex is not null; ex = ex.InnerException)
+        {
+            if (ex is RequestException { Message: var message }
+                && message.Contains("Service Failure", StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
 
     private static bool IsHttpTimeout(Exception exception) => exception switch
     {

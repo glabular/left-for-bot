@@ -67,6 +67,18 @@ public sealed class UpdateHandler : IUpdateHandler
         HandleErrorSource source,
         CancellationToken cancellationToken)
     {
+        if (TelegramNetworkErrorClassifier.IsTransientNetworkError(exception))
+        {
+            var reason = TelegramNetworkErrorClassifier.GetShortReason(exception)!;
+            _logger.LogDebug(
+                exception,
+                "Transient network error in update handler from {Source} ({Reason}).",
+                source,
+                reason);
+
+            return Task.CompletedTask;
+        }
+
         _logger.LogError(exception, "Update handler error from {Source}.", source);
 
         return Task.CompletedTask;
