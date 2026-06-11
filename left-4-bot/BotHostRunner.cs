@@ -19,6 +19,7 @@ public static class BotHostRunner
         builder.Services.AddSingleton<GoldenPoolService>();
         builder.Services.AddSingleton<GoldenPoolEditLimiter>();
         builder.Services.AddSingleton(settings);
+        builder.Services.AddSingleton<TelegramConnectionMonitor>();
         builder.Services.AddSingleton<ITelegramBotClient>(_ => new TelegramBotClient(settings.Token));
         builder.Services.AddHostedService<TelegramBotHostedService>();
         builder.Services.AddSingleton<UpdateHandler>();

@@ -15,6 +15,12 @@ internal static class TelegramNetworkErrorClassifier
 
         for (var ex = exception; ex is not null; ex = ex.InnerException)
         {
+            if (ex is ApiRequestException apiEx
+                && TryGetApiErrorReason(apiEx.ErrorCode) is { } apiReason)
+            {
+                return apiReason;
+            }
+
             if (ex is SocketException socket)
             {
                 if (TryGetSocketErrorReason(socket.SocketErrorCode) is { } socketReason)
@@ -40,6 +46,12 @@ internal static class TelegramNetworkErrorClassifier
                 return "host unknown";
             }
 
+            if (ex is RequestException { Message: var requestMessage }
+                && TryGetInfrastructureMessageReason(requestMessage) is { } infraReason)
+            {
+                return infraReason;
+            }
+
             if (IsHttpTimeout(ex))
             {
                 sawTimeout = true;
@@ -53,6 +65,15 @@ internal static class TelegramNetworkErrorClassifier
 
         return sawTimeout ? "request timed out" : null;
     }
+
+    private static string? TryGetApiErrorReason(int errorCode) => errorCode switch
+    {
+        500 => "server error",
+        502 => "bad gateway",
+        503 => "service unavailable",
+        504 => "gateway timeout",
+        _ => null
+    };
 
     private static string? TryGetSocketErrorReason(SocketError socketError) => socketError switch
     {
@@ -71,6 +92,36 @@ internal static class TelegramNetworkErrorClassifier
         10051 or 10050 or 10061 => "network unreachable",
         _ => null
     };
+
+    private static string? TryGetInfrastructureMessageReason(string message)
+    {
+        if (message.Contains("Bad Gateway", StringComparison.OrdinalIgnoreCase))
+        {
+            return "bad gateway";
+        }
+
+        if (message.Contains("Gateway Timeout", StringComparison.OrdinalIgnoreCase))
+        {
+            return "gateway timeout";
+        }
+
+        if (message.Contains("Service Unavailable", StringComparison.OrdinalIgnoreCase))
+        {
+            return "service unavailable";
+        }
+
+        if (message.Contains("Service Failure", StringComparison.OrdinalIgnoreCase))
+        {
+            return "service failure";
+        }
+
+        if (message.Contains("Internal Server Error", StringComparison.OrdinalIgnoreCase))
+        {
+            return "server error";
+        }
+
+        return null;
+    }
 
     private static bool IsTransportIOException(IOException exception)
     {

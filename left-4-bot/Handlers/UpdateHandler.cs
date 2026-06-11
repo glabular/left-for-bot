@@ -11,17 +11,20 @@ public sealed class UpdateHandler : IUpdateHandler
     private readonly BotSettings _settings;
     private readonly BotUsernameProvider _usernameProvider;
     private readonly GroupCommandHandler _commandHandler;
+    private readonly TelegramConnectionMonitor _connectionMonitor;
     private readonly ILogger<UpdateHandler> _logger;
 
     public UpdateHandler(
         BotSettings settings,
         BotUsernameProvider usernameProvider,
         GroupCommandHandler commandHandler,
+        TelegramConnectionMonitor connectionMonitor,
         ILogger<UpdateHandler> logger)
     {
         _settings = settings;
         _usernameProvider = usernameProvider;
         _commandHandler = commandHandler;
+        _connectionMonitor = connectionMonitor;
         _logger = logger;
     }
 
@@ -69,17 +72,11 @@ public sealed class UpdateHandler : IUpdateHandler
     {
         if (TelegramNetworkErrorClassifier.IsTransientNetworkError(exception))
         {
-            var reason = TelegramNetworkErrorClassifier.GetShortReason(exception)!;
-            _logger.LogDebug(
-                exception,
-                "Transient network error in update handler from {Source} ({Reason}).",
-                source,
-                reason);
-
+            _connectionMonitor.ReportTransientFailure(exception, $"handler:{source}");
             return Task.CompletedTask;
         }
 
-        _logger.LogError(exception, "Update handler error from {Source}.", source);
+        _connectionMonitor.ReportFatalFailure(exception, $"handler:{source}");
 
         return Task.CompletedTask;
     }
