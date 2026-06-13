@@ -1,0 +1,19 @@
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+
+namespace left_4_bot.ServerLogs;
+
+public static class ServerLogSyncServiceCollectionExtensions
+{
+    public static IServiceCollection AddServerLogSync(
+        this IServiceCollection services,
+        IConfiguration configuration)
+    {
+        services.Configure<ServerLogSyncOptions>(
+            configuration.GetSection(ServerLogSyncOptions.SectionName));
+        services.AddSingleton<IServerFtpClient, ServerFtpClient>();
+        services.AddSingleton<ServerLogSyncService>();
+
+        return services;
+    }
+}

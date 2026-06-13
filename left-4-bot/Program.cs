@@ -14,11 +14,11 @@ internal class Program
                 "UserSecretsId is not configured. Add it to left-4-bot.csproj.");
 
         var store = new UserSecretsSettingsStore(userSecretsId);
-        var app = new BotConsoleApp(store);
+        var app = new BotConsoleApp(store, userSecretsId);
 
         while (true)
         {
-            var action = app.Run();
+            var action = await app.RunAsync();
 
             if (action == ConsoleAction.Exit)
             {
