@@ -2,6 +2,7 @@
 using left_4_bot.ServerLogs;
 using Telegram.Bot;
 using Telegram.Bot.Types;
+using Telegram.Bot.Types.Enums;
 
 namespace left_4_bot.Handlers;
 
@@ -238,10 +239,21 @@ public sealed class GroupCommandHandler
 
         var result = await _friendlyFireStats.GetTodayStatsAsync(cancellationToken);
 
-        await bot.SendMessage(
-            message.Chat.Id,
-            result.Message,
-            cancellationToken: cancellationToken);
+        if (result.UseHtmlParseMode)
+        {
+            await bot.SendMessage(
+                message.Chat.Id,
+                result.Message,
+                parseMode: ParseMode.Html,
+                cancellationToken: cancellationToken);
+        }
+        else
+        {
+            await bot.SendMessage(
+                message.Chat.Id,
+                result.Message,
+                cancellationToken: cancellationToken);
+        }
     }
 
     private static async Task HandleHelpAsync(
