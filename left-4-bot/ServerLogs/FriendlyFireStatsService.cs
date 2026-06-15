@@ -27,7 +27,7 @@ public sealed class FriendlyFireStatsService
     }
 
     public Task<FriendlyFireStatsResult> GetTodayStatsAsync(CancellationToken cancellationToken) =>
-        GetStatsForGamingDayAsync(GamingDay.GetCurrentLabel(_gamingDayOptions), cancellationToken);
+        GetStatsForGamingDayAsync(GamingDay.GetCurrentLabel(_gamingDayOptions).AddDays(-1), cancellationToken);
 
     public async Task<FriendlyFireStatsResult> GetStatsForGamingDayAsync(
         DateOnly gamingDayLabel,
@@ -49,10 +49,21 @@ public sealed class FriendlyFireStatsService
                 FormatNoLogsForDay(gamingDayLabel, _gamingDayOptions));
         }
 
-        var attackers = FriendlyFireLogParser.ParseFiles(download.LocalFilePaths, bounds);
+        var scan = GamingDayLogParser.ScanFiles(
+            download.LocalFilePaths,
+            bounds,
+            _prioritySteamIds);
+
+        if (!scan.PriorityPlayerPresent)
+        {
+            return FriendlyFireStatsResult.Succeeded(
+                FormatNoPriorityPlay(gamingDayLabel, _gamingDayOptions));
+        }
 
         return FriendlyFireStatsResult.Succeeded(
-            FormatStats(gamingDayLabel, _gamingDayOptions, attackers, _prioritySteamIds),
+            scan.Attackers.Count == 0
+                ? FormatCleanDay(gamingDayLabel, _gamingDayOptions)
+                : FormatStats(gamingDayLabel, _gamingDayOptions, scan.Attackers, _prioritySteamIds),
             useHtmlParseMode: true);
     }
 
@@ -62,11 +73,6 @@ public sealed class FriendlyFireStatsService
         Dictionary<string, FriendlyFireAttackerStats> attackers,
         IReadOnlySet<string> prioritySteamIds)
     {
-        if (attackers.Count == 0)
-        {
-            return FormatEmptyDay(gamingDayLabel, gamingDayOptions);
-        }
-
         var topOrdered = OrderForTop(attackers.Values, prioritySteamIds);
         var orderedForDetails = OrderForDetails(attackers.Values, prioritySteamIds);
         var builder = new StringBuilder();
@@ -178,7 +184,7 @@ public sealed class FriendlyFireStatsService
         return $"Дружественный огонь за {gamingDayLabel:dd.MM.yyyy} (игровой день, с {startTime:HH:mm} МСК)";
     }
 
-    private static string FormatEmptyDay(DateOnly gamingDayLabel, GamingDayOptions gamingDayOptions)
+    private static string FormatCleanDay(DateOnly gamingDayLabel, GamingDayOptions gamingDayOptions)
     {
         var usesGamingDay = gamingDayOptions.GamingDayStartHour != 0
             || gamingDayOptions.GamingDayStartMinute != 0;
@@ -186,6 +192,16 @@ public sealed class FriendlyFireStatsService
         return usesGamingDay
             ? $"{FormatDayHeader(gamingDayLabel, gamingDayOptions)}\n\nЛоги прочитаны. Попаданий по своим за этот игровой день нет 🎉🕊"
             : $"{FormatDayHeader(gamingDayLabel, gamingDayOptions)}\n\nЛоги прочитаны. Попаданий по своим за этот день нет 🎉🕊";
+    }
+
+    private static string FormatNoPriorityPlay(DateOnly gamingDayLabel, GamingDayOptions gamingDayOptions)
+    {
+        var usesGamingDay = gamingDayOptions.GamingDayStartHour != 0
+            || gamingDayOptions.GamingDayStartMinute != 0;
+
+        return usesGamingDay
+            ? $"{FormatDayHeader(gamingDayLabel, gamingDayOptions)}\n\nСвой состав за этот игровой день на сервере не появлялся. Похоже, сегодня не играли."
+            : $"{FormatDayHeader(gamingDayLabel, gamingDayOptions)}\n\nСвой состав за этот день на сервере не появлялся. Похоже, сегодня не играли.";
     }
 
     private static string FormatNoLogsForDay(DateOnly gamingDayLabel, GamingDayOptions gamingDayOptions)
