@@ -4,6 +4,8 @@ namespace left_4_bot.ServerLogs;
 
 public sealed class ServerLogSyncService
 {
+    private const string PreferredInboxDirectory = @"D:\temp\left4dead_logs";
+
     private const string SetupHint =
         "Server log sync not configured. Run:\n" +
         "  dotnet user-secrets set \"ServerLogs:Host\" \"YOUR_HOST\"\n" +
@@ -59,7 +61,7 @@ public sealed class ServerLogSyncService
                     $"За {moscowDate:dd.MM.yyyy} на сервере нет лог-файлов.");
             }
 
-            var localInbox = Path.GetFullPath(_options.LocalInboxDirectory);
+            var localInbox = ResolveLocalInboxDirectory();
             Directory.CreateDirectory(localInbox);
 
             var localPaths = new List<string>(logFiles.Count);
@@ -102,9 +104,26 @@ public sealed class ServerLogSyncService
         }
 
         return ServerLogSyncResult.Succeeded(
-            Path.GetFullPath(_options.LocalInboxDirectory),
+            ResolveLocalInboxDirectory(),
             string.Join(", ", download.LocalFilePaths.Select(Path.GetFileName)),
             download.Message);
+    }
+
+    private string ResolveLocalInboxDirectory()
+    {
+        if (IsDriveAvailable('D'))
+        {
+            return PreferredInboxDirectory;
+        }
+
+        return Path.GetFullPath(_options.LocalInboxDirectory);
+    }
+
+    private static bool IsDriveAvailable(char driveLetter)
+    {
+        var driveRoot = $"{driveLetter}:\\";
+        return DriveInfo.GetDrives()
+            .Any(drive => drive.Name.Equals(driveRoot, StringComparison.OrdinalIgnoreCase));
     }
 
     private string? ValidateOptions()
