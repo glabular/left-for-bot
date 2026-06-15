@@ -74,7 +74,10 @@ public sealed class FriendlyFireStatsService
         IReadOnlySet<string> prioritySteamIds)
     {
         var topOrdered = OrderForTop(attackers.Values, prioritySteamIds);
-        var orderedForDetails = OrderForDetails(attackers.Values, prioritySteamIds);
+        var priorityAttackers = OrderAttackers(
+            attackers.Values.Where(a => prioritySteamIds.Contains(a.SteamId))).ToList();
+        var otherAttackers = OrderAttackers(
+            attackers.Values.Where(a => !prioritySteamIds.Contains(a.SteamId))).ToList();
         var builder = new StringBuilder();
         var usesGamingDay = gamingDayOptions.GamingDayStartHour != 0
             || gamingDayOptions.GamingDayStartMinute != 0;
@@ -106,38 +109,51 @@ public sealed class FriendlyFireStatsService
         }
 
         builder.AppendLine();
-        builder.AppendLine("Подробно:");
+        builder.AppendLine("<b>Подробно:</b>");
         builder.AppendLine();
 
-        foreach (var attacker in orderedForDetails)
+        foreach (var attacker in priorityAttackers)
         {
-            var total = GetAttackerTotal(attacker);
-            builder.AppendLine($"{EscapeHtml(attacker.Name)} ({total})");
+            AppendAttackerDetails(builder, attacker);
+        }
 
-            foreach (var victim in OrderVictims(attacker))
+        if (otherAttackers.Count > 0)
+        {
+            if (priorityAttackers.Count > 0)
             {
-                builder.AppendLine($"  → {EscapeHtml(victim.Name)}: {victim.HitCount}");
+                builder.AppendLine("--------");
+                builder.AppendLine();
             }
 
+            builder.AppendLine("<b>Остальные:</b>");
             builder.AppendLine();
+
+            foreach (var attacker in otherAttackers)
+            {
+                AppendAttackerDetails(builder, attacker);
+            }
         }
 
         return builder.ToString().TrimEnd();
+    }
+
+    private static void AppendAttackerDetails(StringBuilder builder, FriendlyFireAttackerStats attacker)
+    {
+        var total = GetAttackerTotal(attacker);
+        builder.AppendLine($"{EscapeHtml(attacker.Name)} ({total})");
+
+        foreach (var victim in OrderVictims(attacker))
+        {
+            builder.AppendLine($"  → {EscapeHtml(victim.Name)}: {victim.HitCount}");
+        }
+
+        builder.AppendLine();
     }
 
     private static List<FriendlyFireAttackerStats> OrderForTop(
         IEnumerable<FriendlyFireAttackerStats> attackers,
         IReadOnlySet<string> prioritySteamIds) =>
         OrderAttackers(attackers.Where(a => prioritySteamIds.Contains(a.SteamId))).ToList();
-
-    private static List<FriendlyFireAttackerStats> OrderForDetails(
-        IEnumerable<FriendlyFireAttackerStats> attackers,
-        IReadOnlySet<string> prioritySteamIds)
-    {
-        var priority = OrderAttackers(attackers.Where(a => prioritySteamIds.Contains(a.SteamId)));
-        var others = OrderAttackers(attackers.Where(a => !prioritySteamIds.Contains(a.SteamId)));
-        return priority.Concat(others).ToList();
-    }
 
     private static int GetAttackerTotal(FriendlyFireAttackerStats attacker) =>
         attacker.Victims.Values.Sum(v => v.HitCount);
