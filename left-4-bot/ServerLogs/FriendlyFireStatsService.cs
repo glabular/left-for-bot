@@ -19,13 +19,13 @@ public sealed class FriendlyFireStatsService
         if (!download.IsSuccess)
         {
             return FriendlyFireStatsResult.Failed(
-                MapDownloadError(download.Message));
+                FormatError(MapDownloadError(download.Message)));
         }
 
         if (download.LocalFilePaths.Count == 0)
         {
             return FriendlyFireStatsResult.Succeeded(
-                FormatEmptyDay(moscowDate));
+                FormatNoLogsForDay(moscowDate));
         }
 
         var attackers = FriendlyFireLogParser.ParseFiles(download.LocalFilePaths, moscowDate);
@@ -68,13 +68,31 @@ public sealed class FriendlyFireStatsService
     }
 
     private static string FormatEmptyDay(DateOnly moscowDate) =>
-        $"За {moscowDate:dd.MM.yyyy} (МСК) попаданий по своим не найдено 🎉🕊.";
+        $"Дружественный огонь за {moscowDate:dd.MM.yyyy} (МСК)\n\n" +
+        $"Логи прочитаны. Попаданий по своим за этот день нет 🎉🕊";
 
-    private static string MapDownloadError(string message) =>
-        message.Contains("user-secrets", StringComparison.OrdinalIgnoreCase)
-        || message.Contains("not configured", StringComparison.OrdinalIgnoreCase)
-            ? "Доступ к логам сервера (FTP) не настроен."
-            : message;
+    private static string FormatNoLogsForDay(DateOnly moscowDate) =>
+        $"Дружественный огонь за {moscowDate:dd.MM.yyyy} (МСК)\n\n" +
+        $"За этот день на сервере нет логов. Возможно, никто не играл.";
+
+    private static string FormatError(string details) =>
+        $"⚠️ Не удалось получить статистику.\n\n{details}";
+
+    private static string MapDownloadError(string message)
+    {
+        if (message.Contains("user-secrets", StringComparison.OrdinalIgnoreCase)
+            || message.Contains("not configured", StringComparison.OrdinalIgnoreCase))
+        {
+            return "Доступ к логам сервера (FTP) не настроен.";
+        }
+
+        if (message.Contains("Не удалось скачать", StringComparison.OrdinalIgnoreCase))
+        {
+            return $"{message}\nПопробуйте позже или сообщите администратору.";
+        }
+
+        return message;
+    }
 }
 
 public sealed class FriendlyFireStatsResult

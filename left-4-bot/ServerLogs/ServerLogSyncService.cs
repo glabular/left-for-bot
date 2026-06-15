@@ -54,8 +54,9 @@ public sealed class ServerLogSyncService
 
             if (logFiles.Count == 0)
             {
-                return TodayLogDownloadResult.Failed(
-                    $"За {moscowDate:dd.MM.yyyy} логи не найдены.");
+                return TodayLogDownloadResult.Succeeded(
+                    [],
+                    $"За {moscowDate:dd.MM.yyyy} на сервере нет лог-файлов.");
             }
 
             var localInbox = Path.GetFullPath(_options.LocalInboxDirectory);

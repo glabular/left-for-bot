@@ -230,10 +230,10 @@ public sealed class GroupCommandHandler
         ITelegramBotClient bot,
         Message message,
         CancellationToken cancellationToken)
-    {        
+    {
         await bot.SendMessage(
             message.Chat.Id,
-            $"Скачиваю логи и считаю friendly fire",
+            "Обрабатываю логи...",
             cancellationToken: cancellationToken);
 
         var result = await _friendlyFireStats.GetTodayStatsAsync(cancellationToken);
