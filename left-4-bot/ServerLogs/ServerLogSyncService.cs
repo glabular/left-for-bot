@@ -75,6 +75,9 @@ public sealed class ServerLogSyncService
                 .OrderBy(file => file.Name)
                 .ToList();
 
+            var localInbox = ResolveLocalInboxDirectory();
+            ResetInboxDirectory(localInbox);
+
             if (logFiles.Count == 0)
             {
                 var description = periodDescription
@@ -84,9 +87,6 @@ public sealed class ServerLogSyncService
                     [],
                     $"За {description} на сервере нет лог-файлов.");
             }
-
-            var localInbox = ResolveLocalInboxDirectory();
-            Directory.CreateDirectory(localInbox);
 
             var localPaths = new List<string>(logFiles.Count);
 
@@ -143,6 +143,16 @@ public sealed class ServerLogSyncService
         }
 
         return Path.GetFullPath(_options.LocalInboxDirectory);
+    }
+
+    private static void ResetInboxDirectory(string inboxDirectory)
+    {
+        if (Directory.Exists(inboxDirectory))
+        {
+            Directory.Delete(inboxDirectory, recursive: true);
+        }
+
+        Directory.CreateDirectory(inboxDirectory);
     }
 
     private static bool IsDriveAvailable(char driveLetter)
