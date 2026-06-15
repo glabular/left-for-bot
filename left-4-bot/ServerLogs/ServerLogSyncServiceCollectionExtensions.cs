@@ -11,6 +11,8 @@ public static class ServerLogSyncServiceCollectionExtensions
     {
         services.Configure<ServerLogSyncOptions>(
             configuration.GetSection(ServerLogSyncOptions.SectionName));
+        services.Configure<PriorityPlayersOptions>(
+            configuration.GetSection(PriorityPlayersOptions.SectionName));
         services.AddSingleton<IServerFtpClient, ServerFtpClient>();
         services.AddSingleton<ServerLogSyncService>();
         services.AddSingleton<FriendlyFireStatsService>();

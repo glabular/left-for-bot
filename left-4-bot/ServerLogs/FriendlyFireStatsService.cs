@@ -1,5 +1,6 @@
 using System.Net;
 using System.Text;
+using Microsoft.Extensions.Options;
 
 namespace left_4_bot.ServerLogs;
 
@@ -10,10 +11,16 @@ public sealed class FriendlyFireStatsService
     private static readonly string[] TopPlaceEmojis = ["1️⃣", "2️⃣", "3️⃣"];
 
     private readonly ServerLogSyncService _logSync;
+    private readonly HashSet<string> _prioritySteamIds;
 
-    public FriendlyFireStatsService(ServerLogSyncService logSync)
+    public FriendlyFireStatsService(
+        ServerLogSyncService logSync,
+        IOptions<PriorityPlayersOptions> priorityOptions)
     {
         _logSync = logSync;
+        _prioritySteamIds = new HashSet<string>(
+            priorityOptions.Value.SteamIds,
+            StringComparer.Ordinal);
     }
 
     public async Task<FriendlyFireStatsResult> GetTodayStatsAsync(CancellationToken cancellationToken)
@@ -35,19 +42,23 @@ public sealed class FriendlyFireStatsService
 
         var attackers = FriendlyFireLogParser.ParseFiles(download.LocalFilePaths, moscowDate);
 
-        return FriendlyFireStatsResult.Succeeded(FormatStats(moscowDate, attackers), useHtmlParseMode: true);
+        return FriendlyFireStatsResult.Succeeded(
+            FormatStats(moscowDate, attackers, _prioritySteamIds),
+            useHtmlParseMode: true);
     }
 
     internal static string FormatStats(
         DateOnly moscowDate,
-        Dictionary<string, FriendlyFireAttackerStats> attackers)
+        Dictionary<string, FriendlyFireAttackerStats> attackers,
+        IReadOnlySet<string> prioritySteamIds)
     {
         if (attackers.Count == 0)
         {
             return FormatEmptyDay(moscowDate);
         }
 
-        var ordered = OrderAttackers(attackers.Values).ToList();
+        var topOrdered = OrderForTop(attackers.Values, prioritySteamIds);
+        var orderedForDetails = OrderForDetails(attackers.Values, prioritySteamIds);
         var builder = new StringBuilder();
 
         builder.AppendLine($"Дружественный огонь за {moscowDate:dd.MM.yyyy} (МСК)");
@@ -56,19 +67,27 @@ public sealed class FriendlyFireStatsService
 
         builder.AppendLine("<b>🔪 Топ за день:</b>");
         builder.AppendLine();
-        for (var i = 0; i < Math.Min(TopCount, ordered.Count); i++)
+
+        if (topOrdered.Count == 0)
         {
-            var attacker = ordered[i];
-            var total = GetAttackerTotal(attacker);
-            builder.AppendLine(
-                $"{TopPlaceEmojis[i]} {EscapeHtml(attacker.Name)} — {total} {PluralizeHits(total)}");
+            builder.AppendLine("Никто из приоритетного списка сегодня не стрелял по своим");
+        }
+        else
+        {
+            for (var i = 0; i < Math.Min(TopCount, topOrdered.Count); i++)
+            {
+                var attacker = topOrdered[i];
+                var total = GetAttackerTotal(attacker);
+                builder.AppendLine(
+                    $"{TopPlaceEmojis[i]} {EscapeHtml(attacker.Name)} — {total} {PluralizeHits(total)}");
+            }
         }
 
         builder.AppendLine();
         builder.AppendLine("Подробно:");
         builder.AppendLine();
 
-        foreach (var attacker in ordered)
+        foreach (var attacker in orderedForDetails)
         {
             var total = GetAttackerTotal(attacker);
             builder.AppendLine($"{EscapeHtml(attacker.Name)} ({total})");
@@ -82,6 +101,20 @@ public sealed class FriendlyFireStatsService
         }
 
         return builder.ToString().TrimEnd();
+    }
+
+    private static List<FriendlyFireAttackerStats> OrderForTop(
+        IEnumerable<FriendlyFireAttackerStats> attackers,
+        IReadOnlySet<string> prioritySteamIds) =>
+        OrderAttackers(attackers.Where(a => prioritySteamIds.Contains(a.SteamId))).ToList();
+
+    private static List<FriendlyFireAttackerStats> OrderForDetails(
+        IEnumerable<FriendlyFireAttackerStats> attackers,
+        IReadOnlySet<string> prioritySteamIds)
+    {
+        var priority = OrderAttackers(attackers.Where(a => prioritySteamIds.Contains(a.SteamId)));
+        var others = OrderAttackers(attackers.Where(a => !prioritySteamIds.Contains(a.SteamId)));
+        return priority.Concat(others).ToList();
     }
 
     private static int GetAttackerTotal(FriendlyFireAttackerStats attacker) =>
