@@ -10,7 +10,7 @@ public sealed class ServerLogSyncService
         "  dotnet user-secrets set \"ServerLogs:Port\" \"21\"\n" +
         "  dotnet user-secrets set \"ServerLogs:Username\" \"YOUR_LOGIN\"\n" +
         "  dotnet user-secrets set \"ServerLogs:Password\" \"YOUR_PASSWORD\"\n" +
-        "  dotnet user-secrets set \"ServerLogs:RemoteLogDirectory\" \"left4dead2\"";
+        "  dotnet user-secrets set \"ServerLogs:RemoteLogDirectory\" \"logs\"";
 
     private readonly ServerLogSyncOptions _options;
     private readonly IServerFtpClient _ftpClient;
@@ -23,12 +23,18 @@ public sealed class ServerLogSyncService
         _ftpClient = ftpClient;
     }
 
-    public async Task<ServerLogSyncResult> DownloadLatestLogAsync(CancellationToken cancellationToken)
+    public Task<TodayLogDownloadResult> DownloadTodayLogFilesAsync(
+        CancellationToken cancellationToken) =>
+        DownloadTodayLogFilesAsync(MoscowTime.Today, cancellationToken);
+
+    public async Task<TodayLogDownloadResult> DownloadTodayLogFilesAsync(
+        DateOnly moscowDate,
+        CancellationToken cancellationToken)
     {
         var validationError = ValidateOptions();
         if (validationError is not null)
         {
-            return ServerLogSyncResult.Failed(validationError);
+            return TodayLogDownloadResult.Failed(validationError);
         }
 
         try
@@ -39,21 +45,25 @@ public sealed class ServerLogSyncService
                 _options.RemoteLogDirectory,
                 cancellationToken);
 
-            var textFiles = remoteFiles
-                .Where(file => file.Name.EndsWith(".txt", StringComparison.OrdinalIgnoreCase))
+            var dateToken = moscowDate.ToString("yyyyMMdd", System.Globalization.CultureInfo.InvariantCulture);
+            var logFiles = remoteFiles
+                .Where(file => file.Name.EndsWith(".log", StringComparison.OrdinalIgnoreCase)
+                    && file.Name.Contains(dateToken, StringComparison.Ordinal))
                 .OrderBy(file => file.Name)
                 .ToList();
 
-            if (textFiles.Count == 0)
+            if (logFiles.Count == 0)
             {
-                return ServerLogSyncResult.Failed(
-                    $"No .txt files found in '{_options.RemoteLogDirectory}'.");
+                return TodayLogDownloadResult.Failed(
+                    $"За {moscowDate:dd.MM.yyyy} логи не найдены.");
             }
 
             var localInbox = Path.GetFullPath(_options.LocalInboxDirectory);
             Directory.CreateDirectory(localInbox);
 
-            foreach (var file in textFiles)
+            var localPaths = new List<string>(logFiles.Count);
+
+            foreach (var file in logFiles)
             {
                 var localPath = Path.Combine(localInbox, file.Name);
 
@@ -61,22 +71,39 @@ public sealed class ServerLogSyncService
                     file.FullPath,
                     localPath,
                     cancellationToken);
+
+                localPaths.Add(localPath);
             }
 
-            return ServerLogSyncResult.Succeeded(
-                localInbox,
-                string.Join(", ", textFiles.Select(file => file.Name)),
-                $"Downloaded {textFiles.Count} file(s) to {localInbox}: " +
-                string.Join(", ", textFiles.Select(file => file.Name)));
+            return TodayLogDownloadResult.Succeeded(
+                localPaths,
+                $"Downloaded {logFiles.Count} log file(s) for {moscowDate:dd.MM.yyyy}: " +
+                string.Join(", ", logFiles.Select(file => file.Name)));
         }
         catch (Exception ex)
         {
-            return ServerLogSyncResult.Failed($"Server log sync failed: {ex.Message}");
+            return TodayLogDownloadResult.Failed(
+                $"Не удалось скачать логи с сервера: {ex.Message}");
         }
         finally
         {
             await _ftpClient.DisconnectAsync(cancellationToken);
         }
+    }
+
+    public async Task<ServerLogSyncResult> DownloadLatestLogAsync(CancellationToken cancellationToken)
+    {
+        var download = await DownloadTodayLogFilesAsync(cancellationToken);
+
+        if (!download.IsSuccess)
+        {
+            return ServerLogSyncResult.Failed(download.Message);
+        }
+
+        return ServerLogSyncResult.Succeeded(
+            Path.GetFullPath(_options.LocalInboxDirectory),
+            string.Join(", ", download.LocalFilePaths.Select(Path.GetFileName)),
+            download.Message);
     }
 
     private string? ValidateOptions()

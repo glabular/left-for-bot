@@ -12,7 +12,7 @@ public sealed class ServerLogSyncOptions
 
     public string Password { get; set; } = "";
 
-    public string RemoteLogDirectory { get; set; } = "left4dead2";
+    public string RemoteLogDirectory { get; set; } = "logs";
 
     public string LocalInboxDirectory { get; set; } = "data/server-logs/inbox";
 }

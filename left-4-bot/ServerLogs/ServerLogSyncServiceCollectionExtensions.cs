@@ -13,6 +13,7 @@ public static class ServerLogSyncServiceCollectionExtensions
             configuration.GetSection(ServerLogSyncOptions.SectionName));
         services.AddSingleton<IServerFtpClient, ServerFtpClient>();
         services.AddSingleton<ServerLogSyncService>();
+        services.AddSingleton<FriendlyFireStatsService>();
 
         return services;
     }

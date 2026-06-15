@@ -1,4 +1,5 @@
 ﻿using left_4_bot.L4D2;
+using left_4_bot.ServerLogs;
 using Telegram.Bot;
 using Telegram.Bot.Types;
 
@@ -14,6 +15,7 @@ public sealed class GroupCommandHandler
         /addmap <англ.> — добавить в любимые
         /removemap <англ.> — удалить из любимых
         /randommap — случайная карта из всех
+        /ff — дружественный огонь за сегодня
         /help — справка
 
         Названия кампаний — на английском (например: Dark Carnival)
@@ -28,11 +30,16 @@ public sealed class GroupCommandHandler
 
     private readonly GoldenPoolService _goldenPool;
     private readonly GoldenPoolEditLimiter _editLimiter;
+    private readonly FriendlyFireStatsService _friendlyFireStats;
 
-    public GroupCommandHandler(GoldenPoolService goldenPool, GoldenPoolEditLimiter editLimiter)
+    public GroupCommandHandler(
+        GoldenPoolService goldenPool,
+        GoldenPoolEditLimiter editLimiter,
+        FriendlyFireStatsService friendlyFireStats)
     {
         _goldenPool = goldenPool;
         _editLimiter = editLimiter;
+        _friendlyFireStats = friendlyFireStats;
     }
 
     public async Task HandleAsync(
@@ -66,6 +73,10 @@ public sealed class GroupCommandHandler
 
             case "help":
                 await HandleHelpAsync(bot, message, cancellationToken);
+                break;
+
+            case "ff":
+                await HandleFriendlyFireAsync(bot, message, cancellationToken);
                 break;
 
             default:
@@ -212,6 +223,24 @@ public sealed class GroupCommandHandler
         await bot.SendMessage(
             message.Chat.Id,
             campaign.DisplayName,
+            cancellationToken: cancellationToken);
+    }
+
+    private async Task HandleFriendlyFireAsync(
+        ITelegramBotClient bot,
+        Message message,
+        CancellationToken cancellationToken)
+    {        
+        await bot.SendMessage(
+            message.Chat.Id,
+            $"Скачиваю логи и считаю friendly fire",
+            cancellationToken: cancellationToken);
+
+        var result = await _friendlyFireStats.GetTodayStatsAsync(cancellationToken);
+
+        await bot.SendMessage(
+            message.Chat.Id,
+            result.Message,
             cancellationToken: cancellationToken);
     }
 
