@@ -17,9 +17,20 @@ public sealed class GroupCommandHandler
         /removemap <англ.> — удалить из любимых
         /randommap — случайная карта из всех
         /ff — дружественный огонь за текущий день
+        /server — как прописать сервер в игре
         /help — справка
 
         Названия кампаний — на английском (например: Dark Carnival)
+        """;
+
+    private const string ServerSetupText =
+        """
+        <b>Как прописать сервер</b>
+
+        1. Открыть консоль в игре (клавиша тильда, <b>~</b>)
+        2. Ввести команду и нажать <b>Enter</b>:
+            <code>mm_dedicated_force_servers 46.174.48.12:27217</code>
+        3. В настройках лобби выбрать лучший доступный выделенный сервер.
         """;
 
     private static string EditLimitExceededText =>
@@ -78,6 +89,10 @@ public sealed class GroupCommandHandler
 
             case "ff":
                 await HandleFriendlyFireAsync(bot, message, cancellationToken);
+                break;
+
+            case "server":
+                await HandleServerSetupAsync(bot, message, cancellationToken);
                 break;
 
             default:
@@ -264,6 +279,18 @@ public sealed class GroupCommandHandler
         await bot.SendMessage(
             message.Chat.Id,
             HelpText,
+            cancellationToken: cancellationToken);
+    }
+
+    private static async Task HandleServerSetupAsync(
+        ITelegramBotClient bot,
+        Message message,
+        CancellationToken cancellationToken)
+    {
+        await bot.SendMessage(
+            message.Chat.Id,
+            ServerSetupText,
+            parseMode: ParseMode.Html,
             cancellationToken: cancellationToken);
     }
 
