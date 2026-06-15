@@ -24,7 +24,7 @@ public sealed class FriendlyFireAttackerStats
 public static partial class FriendlyFireLogParser
 {
     [GeneratedRegex(
-        @"^L (?<month>\d{2})/(?<day>\d{2})/(?<year>\d{4}) - .+?""(?<attacker>[^""]+)"" triggered ""friendly_fire"" against ""(?<victim>[^""]+)""",
+        @"^L (?<month>\d{2})/(?<day>\d{2})/(?<year>\d{4}) - (?<hour>\d{2}):(?<minute>\d{2}):(?<second>\d{2}): .+?""(?<attacker>[^""]+)"" triggered ""friendly_fire"" against ""(?<victim>[^""]+)""",
         RegexOptions.Compiled)]
     private static partial Regex FriendlyFireLineRegex();
 
@@ -35,7 +35,7 @@ public static partial class FriendlyFireLogParser
 
     public static Dictionary<string, FriendlyFireAttackerStats> ParseFiles(
         IEnumerable<string> filePaths,
-        DateOnly moscowDate)
+        GamingDayBounds bounds)
     {
         var attackers = new Dictionary<string, FriendlyFireAttackerStats>(StringComparer.Ordinal);
 
@@ -48,7 +48,7 @@ public static partial class FriendlyFireLogParser
 
             foreach (var line in File.ReadLines(filePath))
             {
-                TryParseLine(line, moscowDate, attackers);
+                TryParseLine(line, bounds, attackers);
             }
         }
 
@@ -57,7 +57,7 @@ public static partial class FriendlyFireLogParser
 
     private static void TryParseLine(
         string line,
-        DateOnly moscowDate,
+        GamingDayBounds bounds,
         Dictionary<string, FriendlyFireAttackerStats> attackers)
     {
         var match = FriendlyFireLineRegex().Match(line);
@@ -69,9 +69,13 @@ public static partial class FriendlyFireLogParser
         var month = int.Parse(match.Groups["month"].Value, CultureInfo.InvariantCulture);
         var day = int.Parse(match.Groups["day"].Value, CultureInfo.InvariantCulture);
         var year = int.Parse(match.Groups["year"].Value, CultureInfo.InvariantCulture);
-        var lineDate = new DateOnly(year, month, day);
+        var hour = int.Parse(match.Groups["hour"].Value, CultureInfo.InvariantCulture);
+        var minute = int.Parse(match.Groups["minute"].Value, CultureInfo.InvariantCulture);
+        var second = int.Parse(match.Groups["second"].Value, CultureInfo.InvariantCulture);
 
-        if (lineDate != moscowDate)
+        var eventTime = new DateTime(year, month, day, hour, minute, second);
+
+        if (!GamingDay.Contains(bounds, eventTime))
         {
             return;
         }

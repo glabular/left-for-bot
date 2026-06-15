@@ -29,14 +29,30 @@ public sealed class ServerLogSyncService
         CancellationToken cancellationToken) =>
         DownloadTodayLogFilesAsync(MoscowTime.Today, cancellationToken);
 
-    public async Task<TodayLogDownloadResult> DownloadTodayLogFilesAsync(
+    public Task<TodayLogDownloadResult> DownloadLogFilesAsync(
+        IReadOnlyList<DateOnly> calendarDates,
+        CancellationToken cancellationToken) =>
+        DownloadLogFilesAsync(calendarDates, periodDescription: null, cancellationToken);
+
+    public Task<TodayLogDownloadResult> DownloadTodayLogFilesAsync(
         DateOnly moscowDate,
+        CancellationToken cancellationToken) =>
+        DownloadLogFilesAsync([moscowDate], moscowDate.ToString("dd.MM.yyyy"), cancellationToken);
+
+    private async Task<TodayLogDownloadResult> DownloadLogFilesAsync(
+        IReadOnlyList<DateOnly> calendarDates,
+        string? periodDescription,
         CancellationToken cancellationToken)
     {
         var validationError = ValidateOptions();
         if (validationError is not null)
         {
             return TodayLogDownloadResult.Failed(validationError);
+        }
+
+        if (calendarDates.Count == 0)
+        {
+            return TodayLogDownloadResult.Succeeded([], "No calendar dates requested.");
         }
 
         try
@@ -47,18 +63,26 @@ public sealed class ServerLogSyncService
                 _options.RemoteLogDirectory,
                 cancellationToken);
 
-            var dateToken = moscowDate.ToString("yyyyMMdd", System.Globalization.CultureInfo.InvariantCulture);
+            var dateTokens = calendarDates
+                .Select(date => date.ToString("yyyyMMdd", System.Globalization.CultureInfo.InvariantCulture))
+                .Distinct(StringComparer.Ordinal)
+                .ToList();
+
             var logFiles = remoteFiles
                 .Where(file => file.Name.EndsWith(".log", StringComparison.OrdinalIgnoreCase)
-                    && file.Name.Contains(dateToken, StringComparison.Ordinal))
+                    && dateTokens.Any(token => file.Name.Contains(token, StringComparison.Ordinal)))
+                .DistinctBy(file => file.Name, StringComparer.OrdinalIgnoreCase)
                 .OrderBy(file => file.Name)
                 .ToList();
 
             if (logFiles.Count == 0)
             {
+                var description = periodDescription
+                    ?? string.Join(", ", calendarDates.Select(date => date.ToString("dd.MM.yyyy")));
+
                 return TodayLogDownloadResult.Succeeded(
                     [],
-                    $"За {moscowDate:dd.MM.yyyy} на сервере нет лог-файлов.");
+                    $"За {description} на сервере нет лог-файлов.");
             }
 
             var localInbox = ResolveLocalInboxDirectory();
@@ -78,9 +102,11 @@ public sealed class ServerLogSyncService
                 localPaths.Add(localPath);
             }
 
+            var downloadedDates = string.Join(", ", calendarDates.Select(date => date.ToString("dd.MM.yyyy")));
+
             return TodayLogDownloadResult.Succeeded(
                 localPaths,
-                $"Downloaded {logFiles.Count} log file(s) for {moscowDate:dd.MM.yyyy}: " +
+                $"Downloaded {logFiles.Count} log file(s) for {downloadedDates}: " +
                 string.Join(", ", logFiles.Select(file => file.Name)));
         }
         catch (Exception ex)

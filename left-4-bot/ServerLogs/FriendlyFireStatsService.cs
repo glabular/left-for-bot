@@ -11,22 +11,31 @@ public sealed class FriendlyFireStatsService
     private static readonly string[] TopPlaceEmojis = ["1️⃣", "2️⃣", "3️⃣"];
 
     private readonly ServerLogSyncService _logSync;
+    private readonly GamingDayOptions _gamingDayOptions;
     private readonly HashSet<string> _prioritySteamIds;
 
     public FriendlyFireStatsService(
         ServerLogSyncService logSync,
+        IOptions<GamingDayOptions> gamingDayOptions,
         IOptions<PriorityPlayersOptions> priorityOptions)
     {
         _logSync = logSync;
+        _gamingDayOptions = gamingDayOptions.Value;
         _prioritySteamIds = new HashSet<string>(
             priorityOptions.Value.SteamIds,
             StringComparer.Ordinal);
     }
 
-    public async Task<FriendlyFireStatsResult> GetTodayStatsAsync(CancellationToken cancellationToken)
+    public Task<FriendlyFireStatsResult> GetTodayStatsAsync(CancellationToken cancellationToken) =>
+        GetStatsForGamingDayAsync(GamingDay.GetCurrentLabel(_gamingDayOptions), cancellationToken);
+
+    public async Task<FriendlyFireStatsResult> GetStatsForGamingDayAsync(
+        DateOnly gamingDayLabel,
+        CancellationToken cancellationToken)
     {
-        var moscowDate = MoscowTime.Today;
-        var download = await _logSync.DownloadTodayLogFilesAsync(moscowDate, cancellationToken);
+        var bounds = GamingDay.GetBounds(gamingDayLabel, _gamingDayOptions);
+        var calendarDates = GamingDay.GetCalendarDatesToDownload(bounds);
+        var download = await _logSync.DownloadLogFilesAsync(calendarDates, cancellationToken);
 
         if (!download.IsSuccess)
         {
@@ -37,40 +46,47 @@ public sealed class FriendlyFireStatsService
         if (download.LocalFilePaths.Count == 0)
         {
             return FriendlyFireStatsResult.Succeeded(
-                FormatNoLogsForDay(moscowDate));
+                FormatNoLogsForDay(gamingDayLabel, _gamingDayOptions));
         }
 
-        var attackers = FriendlyFireLogParser.ParseFiles(download.LocalFilePaths, moscowDate);
+        var attackers = FriendlyFireLogParser.ParseFiles(download.LocalFilePaths, bounds);
 
         return FriendlyFireStatsResult.Succeeded(
-            FormatStats(moscowDate, attackers, _prioritySteamIds),
+            FormatStats(gamingDayLabel, _gamingDayOptions, attackers, _prioritySteamIds),
             useHtmlParseMode: true);
     }
 
     internal static string FormatStats(
-        DateOnly moscowDate,
+        DateOnly gamingDayLabel,
+        GamingDayOptions gamingDayOptions,
         Dictionary<string, FriendlyFireAttackerStats> attackers,
         IReadOnlySet<string> prioritySteamIds)
     {
         if (attackers.Count == 0)
         {
-            return FormatEmptyDay(moscowDate);
+            return FormatEmptyDay(gamingDayLabel, gamingDayOptions);
         }
 
         var topOrdered = OrderForTop(attackers.Values, prioritySteamIds);
         var orderedForDetails = OrderForDetails(attackers.Values, prioritySteamIds);
         var builder = new StringBuilder();
+        var usesGamingDay = gamingDayOptions.GamingDayStartHour != 0
+            || gamingDayOptions.GamingDayStartMinute != 0;
 
-        builder.AppendLine($"Дружественный огонь за {moscowDate:dd.MM.yyyy} (МСК)");
+        builder.AppendLine(FormatDayHeader(gamingDayLabel, gamingDayOptions));
         builder.AppendLine("Кто попал по своим и сколько раз.");
         builder.AppendLine();
 
-        builder.AppendLine("<b>🔪 Топ за день:</b>");
+        builder.AppendLine(usesGamingDay
+            ? "<b>🔪 Топ за игровой день:</b>"
+            : "<b>🔪 Топ за день:</b>");
         builder.AppendLine();
 
         if (topOrdered.Count == 0)
         {
-            builder.AppendLine("Никто из приоритетного списка сегодня не стрелял по своим");
+            builder.AppendLine(usesGamingDay
+                ? "Никто из приоритетного списка за этот игровой день не стрелял по своим"
+                : "Никто из приоритетного списка сегодня не стрелял по своим");
         }
         else
         {
@@ -151,17 +167,36 @@ public sealed class FriendlyFireStatsService
 
     private static string EscapeHtml(string text) => WebUtility.HtmlEncode(text);
 
-    private static string FormatDayHeader(DateOnly moscowDate) =>
-        $"Дружественный огонь за {moscowDate:dd.MM.yyyy} (МСК)\n" +
-        "Кто попал по своим и сколько раз.";
+    private static string FormatDayHeader(DateOnly gamingDayLabel, GamingDayOptions gamingDayOptions)
+    {
+        if (gamingDayOptions.GamingDayStartHour == 0 && gamingDayOptions.GamingDayStartMinute == 0)
+        {
+            return $"Дружественный огонь за {gamingDayLabel:dd.MM.yyyy} (МСК)";
+        }
 
-    private static string FormatEmptyDay(DateOnly moscowDate) =>
-        $"{FormatDayHeader(moscowDate)}\n\n" +
-        "Логи прочитаны. Попаданий по своим за этот день нет 🎉🕊";
+        var startTime = new TimeOnly(gamingDayOptions.GamingDayStartHour, gamingDayOptions.GamingDayStartMinute);
+        return $"Дружественный огонь за {gamingDayLabel:dd.MM.yyyy} (игровой день, с {startTime:HH:mm} МСК)";
+    }
 
-    private static string FormatNoLogsForDay(DateOnly moscowDate) =>
-        $"{FormatDayHeader(moscowDate)}\n\n" +
-        "За этот день на сервере нет логов. Возможно, никто не играл.";
+    private static string FormatEmptyDay(DateOnly gamingDayLabel, GamingDayOptions gamingDayOptions)
+    {
+        var usesGamingDay = gamingDayOptions.GamingDayStartHour != 0
+            || gamingDayOptions.GamingDayStartMinute != 0;
+
+        return usesGamingDay
+            ? $"{FormatDayHeader(gamingDayLabel, gamingDayOptions)}\n\nЛоги прочитаны. Попаданий по своим за этот игровой день нет 🎉🕊"
+            : $"{FormatDayHeader(gamingDayLabel, gamingDayOptions)}\n\nЛоги прочитаны. Попаданий по своим за этот день нет 🎉🕊";
+    }
+
+    private static string FormatNoLogsForDay(DateOnly gamingDayLabel, GamingDayOptions gamingDayOptions)
+    {
+        var usesGamingDay = gamingDayOptions.GamingDayStartHour != 0
+            || gamingDayOptions.GamingDayStartMinute != 0;
+
+        return usesGamingDay
+            ? $"{FormatDayHeader(gamingDayLabel, gamingDayOptions)}\n\nЗа этот игровой день на сервере нет логов. Возможно, никто не играл."
+            : $"{FormatDayHeader(gamingDayLabel, gamingDayOptions)}\n\nЗа этот день на сервере нет логов. Возможно, никто не играл.";
+    }
 
     private static string FormatError(string details) =>
         $"⚠️ Не удалось получить статистику.\n\n{details}";
