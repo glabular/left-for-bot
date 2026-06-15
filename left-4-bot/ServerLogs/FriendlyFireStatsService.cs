@@ -27,7 +27,7 @@ public sealed class FriendlyFireStatsService
     }
 
     public Task<FriendlyFireStatsResult> GetTodayStatsAsync(CancellationToken cancellationToken) =>
-        GetStatsForGamingDayAsync(GamingDay.GetCurrentLabel(_gamingDayOptions).AddDays(-1), cancellationToken);
+        GetStatsForGamingDayAsync(GamingDay.GetCurrentLabel(_gamingDayOptions), cancellationToken);
 
     public async Task<FriendlyFireStatsResult> GetStatsForGamingDayAsync(
         DateOnly gamingDayLabel,
