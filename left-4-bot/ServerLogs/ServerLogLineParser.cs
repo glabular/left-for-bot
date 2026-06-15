@@ -65,5 +65,3 @@ internal static partial class ServerLogLineParser
         return true;
     }
 }
-
-internal readonly record struct ServerLogPlayerInfo(string Name, string SteamId, string Team);

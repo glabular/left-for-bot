@@ -1,7 +1,5 @@
 namespace left_4_bot.ServerLogs;
 
-public readonly record struct GamingDayBounds(DateTime StartInclusive, DateTime EndExclusive);
-
 internal static class GamingDay
 {
     private const int MoscowUtcOffsetHours = 3;

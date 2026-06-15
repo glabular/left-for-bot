@@ -40,6 +40,4 @@ public sealed class GoldenPoolEditLimiter
 
     private static DateOnly GetMoscowDateToday() =>
         DateOnly.FromDateTime(DateTime.UtcNow.AddHours(3));
-
-    private sealed record DailyEditCount(DateOnly Date, int Count);
 }
