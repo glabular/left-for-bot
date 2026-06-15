@@ -79,8 +79,7 @@ public sealed class FriendlyFireStatsService
         var otherAttackers = OrderAttackers(
             attackers.Values.Where(a => !prioritySteamIds.Contains(a.SteamId))).ToList();
         var builder = new StringBuilder();
-        var usesGamingDay = gamingDayOptions.GamingDayStartHour != 0
-            || gamingDayOptions.GamingDayStartMinute != 0;
+        var usesGamingDay = gamingDayOptions.GamingDayStartHour != 0;
 
         builder.AppendLine(FormatDayHeader(gamingDayLabel, gamingDayOptions));
         builder.AppendLine("Кто попал по своим и сколько раз.");
@@ -191,19 +190,17 @@ public sealed class FriendlyFireStatsService
 
     private static string FormatDayHeader(DateOnly gamingDayLabel, GamingDayOptions gamingDayOptions)
     {
-        if (gamingDayOptions.GamingDayStartHour == 0 && gamingDayOptions.GamingDayStartMinute == 0)
+        if (gamingDayOptions.GamingDayStartHour == 0)
         {
             return $"Дружественный огонь за {gamingDayLabel:dd.MM.yyyy} (МСК)";
         }
 
-        var startTime = new TimeOnly(gamingDayOptions.GamingDayStartHour, gamingDayOptions.GamingDayStartMinute);
-        return $"Дружественный огонь за {gamingDayLabel:dd.MM.yyyy} (игровой день, с {startTime:HH:mm} МСК)";
+        return $"Дружественный огонь за {gamingDayLabel:dd.MM.yyyy} (игровой день, с {gamingDayOptions.GamingDayStartHour:00}:00 МСК)";
     }
 
     private static string FormatCleanDay(DateOnly gamingDayLabel, GamingDayOptions gamingDayOptions)
     {
-        var usesGamingDay = gamingDayOptions.GamingDayStartHour != 0
-            || gamingDayOptions.GamingDayStartMinute != 0;
+        var usesGamingDay = gamingDayOptions.GamingDayStartHour != 0;
 
         return usesGamingDay
             ? $"{FormatDayHeader(gamingDayLabel, gamingDayOptions)}\n\nЛоги прочитаны. Попаданий по своим за этот игровой день нет 🎉🕊"
@@ -212,8 +209,7 @@ public sealed class FriendlyFireStatsService
 
     private static string FormatNoPriorityPlay(DateOnly gamingDayLabel, GamingDayOptions gamingDayOptions)
     {
-        var usesGamingDay = gamingDayOptions.GamingDayStartHour != 0
-            || gamingDayOptions.GamingDayStartMinute != 0;
+        var usesGamingDay = gamingDayOptions.GamingDayStartHour != 0;
 
         return usesGamingDay
             ? $"{FormatDayHeader(gamingDayLabel, gamingDayOptions)}\n\nСвой состав за этот игровой день на сервере не появлялся. Похоже, сегодня не играли."
@@ -222,8 +218,7 @@ public sealed class FriendlyFireStatsService
 
     private static string FormatNoLogsForDay(DateOnly gamingDayLabel, GamingDayOptions gamingDayOptions)
     {
-        var usesGamingDay = gamingDayOptions.GamingDayStartHour != 0
-            || gamingDayOptions.GamingDayStartMinute != 0;
+        var usesGamingDay = gamingDayOptions.GamingDayStartHour != 0;
 
         return usesGamingDay
             ? $"{FormatDayHeader(gamingDayLabel, gamingDayOptions)}\n\nЗа этот игровой день на сервере нет логов. Возможно, никто не играл."

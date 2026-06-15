@@ -47,5 +47,5 @@ internal static class GamingDay
         eventTime >= bounds.StartInclusive && eventTime < bounds.EndExclusive;
 
     private static DateTime ToDayStart(DateOnly label, GamingDayOptions options) =>
-        label.ToDateTime(new TimeOnly(options.GamingDayStartHour, options.GamingDayStartMinute));
+        label.ToDateTime(new TimeOnly(options.GamingDayStartHour, 0));
 }
