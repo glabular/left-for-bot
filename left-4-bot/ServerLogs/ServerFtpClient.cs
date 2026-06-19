@@ -23,6 +23,8 @@ public sealed class ServerFtpClient : IServerFtpClient
             _options.Password,
             _options.Port);
 
+        ConfigureClient(_client);
+
         await _client.Connect(cancellationToken);
     }
 
@@ -46,13 +48,14 @@ public sealed class ServerFtpClient : IServerFtpClient
     public async Task DownloadFileAsync(
         string remotePath,
         string localPath,
+        FtpLocalExists existsMode,
         CancellationToken cancellationToken)
     {
         var client = GetConnectedClient();
         var status = await client.DownloadFile(
             localPath,
             remotePath,
-            FtpLocalExists.Overwrite,
+            existsMode,
             FtpVerify.None,
             token: cancellationToken);
 
@@ -81,6 +84,18 @@ public sealed class ServerFtpClient : IServerFtpClient
     public async ValueTask DisposeAsync()
     {
         await DisconnectAsync(CancellationToken.None);
+    }
+
+    private static void ConfigureClient(AsyncFtpClient client)
+    {
+        client.Config.RetryAttempts = 3;
+        client.Config.ConnectTimeout = 60_000;
+        client.Config.ReadTimeout = 120_000;
+        client.Config.DataConnectionConnectTimeout = 60_000;
+        client.Config.DataConnectionReadTimeout = 120_000;
+        client.Config.SocketKeepAlive = true;
+        client.Config.StaleDataCheck = true;
+        client.Config.DataConnectionType = FtpDataConnectionType.PASV;
     }
 
     private AsyncFtpClient GetConnectedClient()

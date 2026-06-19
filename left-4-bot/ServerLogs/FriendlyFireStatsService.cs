@@ -189,7 +189,7 @@ public sealed class FriendlyFireStatsService
         $"{FormatDayHeader(gamingDayLabel)}\n\nЛоги прочитаны. Попаданий по своим за этот день нет 🎉🕊";
 
     private static string FormatNoPriorityPlay(DateOnly gamingDayLabel) =>
-        $"{FormatDayHeader(gamingDayLabel)}\n\nСвой состав за этот день на сервере не появлялся. Похоже, сегодня не играли.";
+        $"{FormatDayHeader(gamingDayLabel)}\n\nСвой состав за этот день на сервере не появлялся. Похоже, что не играли.";
 
     private static string FormatNoLogsForDay(DateOnly gamingDayLabel) =>
         $"{FormatDayHeader(gamingDayLabel)}\n\nЗа этот день на сервере нет логов. Возможно, никто не играл.";

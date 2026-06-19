@@ -2,6 +2,7 @@
 using left_4_bot.Storage;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 
 namespace left_4_bot.Console;
 
@@ -100,6 +101,7 @@ public sealed class BotConsoleApp
             .Build();
 
         var services = new ServiceCollection();
+        services.AddLogging(builder => builder.AddConsole());
         services.AddServerLogSync(configuration);
 
         await using var provider = services.BuildServiceProvider(new ServiceProviderOptions

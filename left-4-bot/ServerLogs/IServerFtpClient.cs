@@ -1,3 +1,5 @@
+using FluentFTP;
+
 namespace left_4_bot.ServerLogs;
 
 public interface IServerFtpClient : IAsyncDisposable
@@ -11,6 +13,7 @@ public interface IServerFtpClient : IAsyncDisposable
     Task DownloadFileAsync(
         string remotePath,
         string localPath,
+        FtpLocalExists existsMode,
         CancellationToken cancellationToken);
 
     Task DisconnectAsync(CancellationToken cancellationToken);

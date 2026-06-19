@@ -9,3 +9,7 @@
 
 # NuGet (legacy packages.config)
 packages/
+
+
+.cursor/
+docs/

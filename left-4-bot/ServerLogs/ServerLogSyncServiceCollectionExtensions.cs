@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 
 namespace left_4_bot.ServerLogs;
 
@@ -9,6 +10,7 @@ public static class ServerLogSyncServiceCollectionExtensions
         this IServiceCollection services,
         IConfiguration configuration)
     {
+        services.AddLogging();
         services.Configure<ServerLogSyncOptions>(
             configuration.GetSection(ServerLogSyncOptions.SectionName));
         services.Configure<GamingDayOptions>(
