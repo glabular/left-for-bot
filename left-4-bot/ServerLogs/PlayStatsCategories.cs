@@ -7,8 +7,6 @@ public static class PlayStatsCategories
         new("Убито обычных заражённых", player => player.Common),
         new("Убито особых заражённых", player => player.SiKilled),
         new("Выстрелов в голову", player => player.Headshots),
-        new("Урон по особым", player => player.SiDamage),
-        new("Дружественный огонь (playstats)", player => player.FfGiven),
         new("Урон по ведьме", player => player.WitchDamage),
     ];
 }

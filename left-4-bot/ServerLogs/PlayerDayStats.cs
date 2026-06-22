@@ -18,9 +18,5 @@ public sealed class PlayerDayStats
 
     public int Headshots { get; set; }
 
-    public int SiDamage { get; set; }
-
-    public int FfGiven { get; set; }
-
     public int WitchDamage { get; set; }
 }

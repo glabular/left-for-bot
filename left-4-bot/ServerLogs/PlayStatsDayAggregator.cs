@@ -38,8 +38,6 @@ public static class PlayStatsDayAggregator
                     aggregate.Headshots += player.HeadshotsSmg
                         + player.HeadshotsSniper
                         + player.HeadshotsPistol;
-                    aggregate.SiDamage += player.SiDamage;
-                    aggregate.FfGiven += player.FfGiven;
                     aggregate.WitchDamage += player.WitchDamage;
 
                     if (!string.IsNullOrEmpty(player.PlayerName))
