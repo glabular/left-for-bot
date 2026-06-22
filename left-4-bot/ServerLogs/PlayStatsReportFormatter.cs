@@ -5,9 +5,13 @@ namespace left_4_bot.ServerLogs;
 
 public static class PlayStatsReportFormatter
 {
-    private const int TopCount = 5;
+    private const int TopCount = 10;
 
-    private static readonly string[] TopPlaceEmojis = ["1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣"];
+    private static readonly string[] TopPlaceEmojis =
+    [
+        "1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣",
+        "6️⃣", "7️⃣", "8️⃣", "9️⃣", "🔟",
+    ];
 
     public static string Format(
         DateOnly gamingDayLabel,
@@ -50,26 +54,68 @@ public static class PlayStatsReportFormatter
     {
         builder.AppendLine($"<b>{EscapeHtml(category.Title)}</b>");
 
-        var topPlayers = players.Values
-            .Where(player => prioritySteamIds.Contains(player.SteamId))
-            .Where(player => category.GetValue(player) > 0)
-            .OrderByDescending(player => category.GetValue(player))
-            .ThenBy(player => player.Name, StringComparer.OrdinalIgnoreCase)
-            .Take(TopCount)
-            .ToList();
+        var (priorityPlayers, otherPlayers) = SelectCategoryLeaders(
+            category,
+            players,
+            prioritySteamIds);
 
-        if (topPlayers.Count == 0)
+        if (priorityPlayers.Count == 0 && otherPlayers.Count == 0)
         {
             builder.AppendLine("Нет данных за день");
             return;
         }
 
-        for (var i = 0; i < topPlayers.Count; i++)
+        for (var i = 0; i < priorityPlayers.Count; i++)
         {
-            var player = topPlayers[i];
+            var player = priorityPlayers[i];
             var value = category.GetValue(player);
             builder.AppendLine($"{TopPlaceEmojis[i]} {EscapeHtml(player.Name)} — {value}");
         }
+
+        if (otherPlayers.Count == 0)
+        {
+            return;
+        }
+
+        builder.AppendLine();
+
+        foreach (var player in otherPlayers)
+        {
+            var value = category.GetValue(player);
+            builder.AppendLine($"{EscapeHtml(player.Name)} — {value}");
+        }
+    }
+
+    private static (List<PlayerDayStats> Priority, List<PlayerDayStats> Others) SelectCategoryLeaders(
+        PlayStatsCategory category,
+        IReadOnlyDictionary<string, PlayerDayStats> players,
+        IReadOnlySet<string> prioritySteamIds)
+    {
+        var withValue = players.Values
+            .Where(player => category.GetValue(player) > 0)
+            .ToList();
+
+        var priorityPlayers = withValue
+            .Where(player => prioritySteamIds.Contains(player.SteamId))
+            .OrderByDescending(player => category.GetValue(player))
+            .ThenBy(player => player.Name, StringComparer.OrdinalIgnoreCase)
+            .Take(TopCount)
+            .ToList();
+
+        var remainingSlots = TopCount - priorityPlayers.Count;
+        if (remainingSlots <= 0)
+        {
+            return (priorityPlayers, []);
+        }
+
+        var otherPlayers = withValue
+            .Where(player => !prioritySteamIds.Contains(player.SteamId))
+            .OrderByDescending(player => category.GetValue(player))
+            .ThenBy(player => player.Name, StringComparer.OrdinalIgnoreCase)
+            .Take(remainingSlots)
+            .ToList();
+
+        return (priorityPlayers, otherPlayers);
     }
 
     private static string EscapeHtml(string text) => WebUtility.HtmlEncode(text);
