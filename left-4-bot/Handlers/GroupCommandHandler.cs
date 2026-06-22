@@ -22,6 +22,8 @@ public sealed class GroupCommandHandler
 
         /ff [дд.мм.гггг] — дружественный огонь (без даты — текущий день)
 
+        /stat — убийства обычных заражённых за текущий день
+
         /server — как прописать сервер в игре
         /help — справка
         """;
@@ -46,15 +48,18 @@ public sealed class GroupCommandHandler
     private readonly GoldenPoolService _goldenPool;
     private readonly GoldenPoolEditLimiter _editLimiter;
     private readonly FriendlyFireStatsService _friendlyFireStats;
+    private readonly CommonKillsStatsService _commonKillsStats;
 
     public GroupCommandHandler(
         GoldenPoolService goldenPool,
         GoldenPoolEditLimiter editLimiter,
-        FriendlyFireStatsService friendlyFireStats)
+        FriendlyFireStatsService friendlyFireStats,
+        CommonKillsStatsService commonKillsStats)
     {
         _goldenPool = goldenPool;
         _editLimiter = editLimiter;
         _friendlyFireStats = friendlyFireStats;
+        _commonKillsStats = commonKillsStats;
     }
 
     public async Task HandleAsync(
@@ -92,6 +97,10 @@ public sealed class GroupCommandHandler
 
             case "ff":
                 await HandleFriendlyFireAsync(bot, message, args, cancellationToken);
+                break;
+
+            case "stat":
+                await HandleStatAsync(bot, message, cancellationToken);
                 break;
 
             case "server":
@@ -282,6 +291,35 @@ public sealed class GroupCommandHandler
             cancellationToken: cancellationToken);
 
         var result = await statsTask;
+
+        if (result.UseHtmlParseMode)
+        {
+            await bot.SendMessage(
+                message.Chat.Id,
+                result.Message,
+                parseMode: ParseMode.Html,
+                cancellationToken: cancellationToken);
+        }
+        else
+        {
+            await bot.SendMessage(
+                message.Chat.Id,
+                result.Message,
+                cancellationToken: cancellationToken);
+        }
+    }
+
+    private async Task HandleStatAsync(
+        ITelegramBotClient bot,
+        Message message,
+        CancellationToken cancellationToken)
+    {
+        await bot.SendMessage(
+            message.Chat.Id,
+            "Обрабатываю логи...",
+            cancellationToken: cancellationToken);
+
+        var result = await _commonKillsStats.GetTodayStatsAsync(cancellationToken);
 
         if (result.UseHtmlParseMode)
         {

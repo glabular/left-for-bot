@@ -15,4 +15,8 @@ public sealed class ServerLogSyncOptions
     public string RemoteLogDirectory { get; set; } = "logs";
 
     public string LocalInboxDirectory { get; set; } = "data/server-logs/inbox";
+
+    public string RemotePlayStatsDirectory { get; set; } = "left4dead2/addons/sourcemod/logs";
+
+    public string LocalPlayStatsInboxDirectory { get; set; } = "data/playstats/inbox";
 }

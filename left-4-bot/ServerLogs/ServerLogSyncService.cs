@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Net.Sockets;
 using FluentFTP;
 using FluentFTP.Exceptions;
@@ -19,7 +20,8 @@ public sealed class ServerLogSyncService
         "  dotnet user-secrets set \"ServerLogs:Port\" \"21\"\n" +
         "  dotnet user-secrets set \"ServerLogs:Username\" \"YOUR_LOGIN\"\n" +
         "  dotnet user-secrets set \"ServerLogs:Password\" \"YOUR_PASSWORD\"\n" +
-        "  dotnet user-secrets set \"ServerLogs:RemoteLogDirectory\" \"logs\"";
+        "  dotnet user-secrets set \"ServerLogs:RemoteLogDirectory\" \"logs\"\n" +
+        "  dotnet user-secrets set \"ServerLogs:RemotePlayStatsDirectory\" \"left4dead2/addons/sourcemod/logs\"";
 
     private readonly ServerLogSyncOptions _options;
     private readonly IServerFtpClient _ftpClient;
@@ -44,14 +46,70 @@ public sealed class ServerLogSyncService
         CancellationToken cancellationToken) =>
         DownloadLogFilesAsync(calendarDates, periodDescription: null, cancellationToken);
 
+    public Task<TodayLogDownloadResult> DownloadPlayStatsFilesAsync(
+        IReadOnlyList<DateOnly> calendarDates,
+        CancellationToken cancellationToken) =>
+        DownloadPlayStatsFilesAsync(calendarDates, periodDescription: null, cancellationToken);
+
     public Task<TodayLogDownloadResult> DownloadTodayLogFilesAsync(
         DateOnly moscowDate,
         CancellationToken cancellationToken) =>
         DownloadLogFilesAsync([moscowDate], moscowDate.ToString("dd.MM.yyyy"), cancellationToken);
 
-    private async Task<TodayLogDownloadResult> DownloadLogFilesAsync(
+    private Task<TodayLogDownloadResult> DownloadLogFilesAsync(
         IReadOnlyList<DateOnly> calendarDates,
         string? periodDescription,
+        CancellationToken cancellationToken)
+    {
+        var dateTokens = calendarDates
+            .Select(date => date.ToString("yyyyMMdd", CultureInfo.InvariantCulture))
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+
+        return DownloadRemoteFilesAsync(
+            calendarDates,
+            periodDescription,
+            _options.RemoteLogDirectory,
+            ResolveLocalInboxDirectory(),
+            file => file.Name.EndsWith(".log", StringComparison.OrdinalIgnoreCase)
+                && dateTokens.Any(token => file.Name.Contains(token, StringComparison.Ordinal)),
+            emptyFilesMessage: datesLabel => $"За {datesLabel} на сервере нет лог-файлов.",
+            downloadedFilesMessage: (count, datesLabel, names) =>
+                $"Downloaded {count} log file(s) for {datesLabel}: {names}",
+            cancellationToken);
+    }
+
+    private Task<TodayLogDownloadResult> DownloadPlayStatsFilesAsync(
+        IReadOnlyList<DateOnly> calendarDates,
+        string? periodDescription,
+        CancellationToken cancellationToken)
+    {
+        var datePrefixes = calendarDates
+            .Select(date => date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture))
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+
+        return DownloadRemoteFilesAsync(
+            calendarDates,
+            periodDescription,
+            ResolveRemotePlayStatsDirectory(),
+            ResolveLocalPlayStatsInboxDirectory(),
+            file => file.Name.EndsWith(".txt", StringComparison.OrdinalIgnoreCase)
+                && datePrefixes.Any(prefix => file.Name.StartsWith(prefix, StringComparison.Ordinal)),
+            emptyFilesMessage: datesLabel => $"За {datesLabel} на сервере нет playstats-файлов.",
+            downloadedFilesMessage: (count, datesLabel, names) =>
+                $"Downloaded {count} playstats file(s) for {datesLabel}: {names}",
+            cancellationToken);
+    }
+
+    private async Task<TodayLogDownloadResult> DownloadRemoteFilesAsync(
+        IReadOnlyList<DateOnly> calendarDates,
+        string? periodDescription,
+        string remoteDirectory,
+        string localInbox,
+        Func<RemoteFileInfo, bool> matchesFile,
+        Func<string, string> emptyFilesMessage,
+        Func<int, string, string, string> downloadedFilesMessage,
         CancellationToken cancellationToken)
     {
         var validationError = ValidateOptions();
@@ -71,37 +129,32 @@ public sealed class ServerLogSyncService
         {
             await _ftpClient.ConnectAsync(cancellationToken);
 
+            _logger.LogDebug("Listing remote directory {RemoteDirectory}", remoteDirectory);
+
             var remoteFiles = await _ftpClient.ListFilesAsync(
-                _options.RemoteLogDirectory,
+                remoteDirectory,
                 cancellationToken);
 
-            var dateTokens = calendarDates
-                .Select(date => date.ToString("yyyyMMdd", System.Globalization.CultureInfo.InvariantCulture))
-                .Distinct(StringComparer.Ordinal)
-                .ToList();
-
-            var logFiles = remoteFiles
-                .Where(file => file.Name.EndsWith(".log", StringComparison.OrdinalIgnoreCase)
-                    && dateTokens.Any(token => file.Name.Contains(token, StringComparison.Ordinal)))
+            var matchedFiles = remoteFiles
+                .Where(matchesFile)
                 .DistinctBy(file => file.Name, StringComparer.OrdinalIgnoreCase)
                 .OrderBy(file => file.Name)
                 .ToList();
 
-            var localInbox = ResolveLocalInboxDirectory();
             EnsureInboxDirectory(localInbox);
 
-            if (logFiles.Count == 0)
+            if (matchedFiles.Count == 0)
             {
                 var description = periodDescription ?? datesLabel;
 
                 return TodayLogDownloadResult.Succeeded(
                     [],
-                    $"За {description} на сервере нет лог-файлов.");
+                    emptyFilesMessage(description));
             }
 
-            var localPaths = new List<string>(logFiles.Count);
+            var localPaths = new List<string>(matchedFiles.Count);
 
-            foreach (var file in logFiles)
+            foreach (var file in matchedFiles)
             {
                 var localPath = Path.Combine(localInbox, file.Name);
                 var localSize = File.Exists(localPath) ? new FileInfo(localPath).Length : 0L;
@@ -129,14 +182,15 @@ public sealed class ServerLogSyncService
                 localPaths.Add(localPath);
             }
 
+            var fileNames = string.Join(", ", matchedFiles.Select(file => file.Name));
+
             return TodayLogDownloadResult.Succeeded(
                 localPaths,
-                $"Downloaded {logFiles.Count} log file(s) for {datesLabel}: " +
-                string.Join(", ", logFiles.Select(file => file.Name)));
+                downloadedFilesMessage(matchedFiles.Count, datesLabel, fileNames));
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to download server logs for dates {Dates}", datesLabel);
+            _logger.LogError(ex, "Failed to download server files for dates {Dates}", datesLabel);
 
             return TodayLogDownloadResult.Failed(
                 $"Не удалось скачать логи с сервера: {ex.Message}");
@@ -222,6 +276,39 @@ public sealed class ServerLogSyncService
         }
 
         return Path.GetFullPath(_options.LocalInboxDirectory);
+    }
+
+    private string ResolveLocalPlayStatsInboxDirectory() =>
+        Path.GetFullPath(_options.LocalPlayStatsInboxDirectory);
+
+    private string ResolveRemotePlayStatsDirectory()
+    {
+        var configured = _options.RemotePlayStatsDirectory.Trim();
+
+        if (!string.IsNullOrEmpty(configured)
+            && !configured.Equals("addons/sourcemod/logs", StringComparison.Ordinal))
+        {
+            return configured;
+        }
+
+        return DerivePlayStatsDirectoryFromLogDirectory(_options.RemoteLogDirectory);
+    }
+
+    internal static string DerivePlayStatsDirectoryFromLogDirectory(string remoteLogDirectory)
+    {
+        var logDir = remoteLogDirectory.Trim().TrimEnd('/', '\\');
+
+        if (logDir.EndsWith("logs", StringComparison.OrdinalIgnoreCase))
+        {
+            var prefix = logDir.Length == 4
+                ? ""
+                : logDir[..^4].TrimEnd('/', '\\');
+
+            const string suffix = "addons/sourcemod/logs";
+            return string.IsNullOrEmpty(prefix) ? suffix : $"{prefix}/{suffix}";
+        }
+
+        return "left4dead2/addons/sourcemod/logs";
     }
 
     private static void EnsureInboxDirectory(string inboxDirectory)
