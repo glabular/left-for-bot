@@ -1,0 +1,26 @@
+namespace left_4_bot.ServerLogs;
+
+public sealed class PlayerDayStats
+{
+    public PlayerDayStats(string steamId, string name)
+    {
+        SteamId = steamId;
+        Name = name;
+    }
+
+    public string SteamId { get; }
+
+    public string Name { get; set; }
+
+    public int Common { get; set; }
+
+    public int SiKilled { get; set; }
+
+    public int Headshots { get; set; }
+
+    public int SiDamage { get; set; }
+
+    public int FfGiven { get; set; }
+
+    public int WitchDamage { get; set; }
+}

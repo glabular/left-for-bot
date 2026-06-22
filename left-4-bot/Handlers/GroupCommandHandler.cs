@@ -22,7 +22,7 @@ public sealed class GroupCommandHandler
 
         /ff [дд.мм.гггг] — дружественный огонь (без даты — текущий день)
 
-        /stat — убийства обычных заражённых за текущий день
+        /stat — статистика за текущий день
 
         /server — как прописать сервер в игре
         /help — справка
@@ -48,18 +48,18 @@ public sealed class GroupCommandHandler
     private readonly GoldenPoolService _goldenPool;
     private readonly GoldenPoolEditLimiter _editLimiter;
     private readonly FriendlyFireStatsService _friendlyFireStats;
-    private readonly CommonKillsStatsService _commonKillsStats;
+    private readonly PlayStatsService _playStats;
 
     public GroupCommandHandler(
         GoldenPoolService goldenPool,
         GoldenPoolEditLimiter editLimiter,
         FriendlyFireStatsService friendlyFireStats,
-        CommonKillsStatsService commonKillsStats)
+        PlayStatsService playStats)
     {
         _goldenPool = goldenPool;
         _editLimiter = editLimiter;
         _friendlyFireStats = friendlyFireStats;
-        _commonKillsStats = commonKillsStats;
+        _playStats = playStats;
     }
 
     public async Task HandleAsync(
@@ -319,7 +319,7 @@ public sealed class GroupCommandHandler
             "Обрабатываю логи...",
             cancellationToken: cancellationToken);
 
-        var result = await _commonKillsStats.GetTodayStatsAsync(cancellationToken);
+        var result = await _playStats.GetTodayStatsAsync(cancellationToken);
 
         if (result.UseHtmlParseMode)
         {

@@ -20,7 +20,7 @@ public static class ServerLogSyncServiceCollectionExtensions
         services.AddSingleton<IServerFtpClient, ServerFtpClient>();
         services.AddSingleton<ServerLogSyncService>();
         services.AddSingleton<FriendlyFireStatsService>();
-        services.AddSingleton<CommonKillsStatsService>();
+        services.AddSingleton<PlayStatsService>();
 
         return services;
     }
