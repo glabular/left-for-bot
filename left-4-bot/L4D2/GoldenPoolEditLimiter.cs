@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using left_4_bot.ServerLogs;
 
 namespace left_4_bot.L4D2;
 
@@ -15,7 +16,7 @@ public sealed class GoldenPoolEditLimiter
 
         lock (gate)
         {
-            var today = GetMoscowDateToday();
+            var today = MoscowTime.Today;
 
             if (_counts.TryGetValue(userId, out var entry) && entry.Date == today && entry.Count >= DailyLimit)
             {
@@ -37,7 +38,4 @@ public sealed class GoldenPoolEditLimiter
             return true;
         }
     }
-
-    private static DateOnly GetMoscowDateToday() =>
-        DateOnly.FromDateTime(DateTime.UtcNow.AddHours(3));
 }
