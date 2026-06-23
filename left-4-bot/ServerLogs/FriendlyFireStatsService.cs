@@ -27,13 +27,13 @@ public sealed class FriendlyFireStatsService
     }
 
     public Task<FriendlyFireStatsResult> GetTodayStatsAsync(CancellationToken cancellationToken) =>
-        GetStatsForGamingDayAsync(GamingDay.GetCurrentLabel(_gamingDayOptions), cancellationToken);
+        GetStatsForGamingDayAsync(GamingDay.GetCurrentAnchor(_gamingDayOptions), cancellationToken);
 
     public async Task<FriendlyFireStatsResult> GetStatsForGamingDayAsync(
-        DateOnly gamingDayLabel,
+        DateOnly gamingDayAnchor,
         CancellationToken cancellationToken)
     {
-        var bounds = GamingDay.GetBounds(gamingDayLabel, _gamingDayOptions);
+        var bounds = GamingDay.GetBounds(gamingDayAnchor, _gamingDayOptions);
         var calendarDates = GamingDay.GetCalendarDatesToDownload(bounds);
         var download = await _logSync.DownloadLogFilesAsync(calendarDates, cancellationToken);
 
@@ -46,7 +46,7 @@ public sealed class FriendlyFireStatsService
         if (download.LocalFilePaths.Count == 0)
         {
             return FriendlyFireStatsResult.Succeeded(
-                FormatNoLogsForDay(gamingDayLabel));
+                FormatNoLogsForDay(gamingDayAnchor));
         }
 
         var scan = GamingDayLogParser.ScanFiles(
@@ -57,18 +57,18 @@ public sealed class FriendlyFireStatsService
         if (!scan.PriorityPlayerPresent)
         {
             return FriendlyFireStatsResult.Succeeded(
-                FormatNoPriorityPlay(gamingDayLabel));
+                FormatNoPriorityPlay(gamingDayAnchor));
         }
 
         return FriendlyFireStatsResult.Succeeded(
             scan.Attackers.Count == 0
-                ? FormatCleanDay(gamingDayLabel)
-                : FormatStats(gamingDayLabel, scan.Attackers, _prioritySteamIds),
+                ? FormatCleanDay(gamingDayAnchor)
+                : FormatStats(gamingDayAnchor, scan.Attackers, _prioritySteamIds),
             useHtmlParseMode: true);
     }
 
     internal static string FormatStats(
-        DateOnly gamingDayLabel,
+        DateOnly gamingDayAnchor,
         Dictionary<string, FriendlyFireAttackerStats> attackers,
         IReadOnlySet<string> prioritySteamIds)
     {
@@ -79,7 +79,7 @@ public sealed class FriendlyFireStatsService
             attackers.Values.Where(a => !prioritySteamIds.Contains(a.SteamId))).ToList();
         var builder = new StringBuilder();
 
-        builder.AppendLine(FormatDayHeader(gamingDayLabel));
+        builder.AppendLine(FormatDayHeader(gamingDayAnchor));
         builder.AppendLine("Кто попал по своим и сколько раз.");
         builder.AppendLine();
 
@@ -182,17 +182,17 @@ public sealed class FriendlyFireStatsService
 
     private static string EscapeHtml(string text) => WebUtility.HtmlEncode(text);
 
-    private static string FormatDayHeader(DateOnly gamingDayLabel) =>
-        $"Дружественный огонь за {gamingDayLabel:dd.MM.yyyy} (МСК)";
+    private static string FormatDayHeader(DateOnly gamingDayAnchor) =>
+        $"Дружественный огонь за {gamingDayAnchor:dd.MM.yyyy} (МСК)";
 
-    private static string FormatCleanDay(DateOnly gamingDayLabel) =>
-        $"{FormatDayHeader(gamingDayLabel)}\n\nЛоги прочитаны. Попаданий по своим за этот день нет 🎉🕊";
+    private static string FormatCleanDay(DateOnly gamingDayAnchor) =>
+        $"{FormatDayHeader(gamingDayAnchor)}\n\nЛоги прочитаны. Попаданий по своим за этот день нет 🎉🕊";
 
-    private static string FormatNoPriorityPlay(DateOnly gamingDayLabel) =>
-        $"{FormatDayHeader(gamingDayLabel)}\n\nСвой состав за этот день на сервере не появлялся. Похоже, что не играли.";
+    private static string FormatNoPriorityPlay(DateOnly gamingDayAnchor) =>
+        $"{FormatDayHeader(gamingDayAnchor)}\n\nСвой состав за этот день на сервере не появлялся. Похоже, что не играли.";
 
-    private static string FormatNoLogsForDay(DateOnly gamingDayLabel) =>
-        $"{FormatDayHeader(gamingDayLabel)}\n\nЗа этот день на сервере нет логов. Возможно, никто не играл.";
+    private static string FormatNoLogsForDay(DateOnly gamingDayAnchor) =>
+        $"{FormatDayHeader(gamingDayAnchor)}\n\nЗа этот день на сервере нет логов. Возможно, никто не играл.";
 
     private static string FormatError(string details) =>
         $"⚠️ Не удалось получить статистику.\n\n{details}";

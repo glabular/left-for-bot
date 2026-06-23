@@ -21,13 +21,13 @@ public sealed class PlayStatsService
     }
 
     public Task<FriendlyFireStatsResult> GetTodayStatsAsync(CancellationToken cancellationToken) =>
-        GetStatsForGamingDayAsync(GamingDay.GetCurrentLabel(_gamingDayOptions), cancellationToken);
+        GetStatsForGamingDayAsync(GamingDay.GetCurrentAnchor(_gamingDayOptions), cancellationToken);
 
     public async Task<FriendlyFireStatsResult> GetStatsForGamingDayAsync(
-        DateOnly gamingDayLabel,
+        DateOnly gamingDayAnchor,
         CancellationToken cancellationToken)
     {
-        var bounds = GamingDay.GetBounds(gamingDayLabel, _gamingDayOptions);
+        var bounds = GamingDay.GetBounds(gamingDayAnchor, _gamingDayOptions);
         var calendarDates = GamingDay.GetCalendarDatesToDownload(bounds);
         var download = await _logSync.DownloadPlayStatsFilesAsync(calendarDates, cancellationToken);
 
@@ -40,7 +40,7 @@ public sealed class PlayStatsService
         if (download.LocalFilePaths.Count == 0)
         {
             return FriendlyFireStatsResult.Succeeded(
-                PlayStatsReportFormatter.FormatNoLogsForDay(gamingDayLabel));
+                PlayStatsReportFormatter.FormatNoLogsForDay(gamingDayAnchor));
         }
 
         var players = PlayStatsDayAggregator.ParseFiles(download.LocalFilePaths);
@@ -48,12 +48,12 @@ public sealed class PlayStatsService
         if (!players.Keys.Any(_prioritySteamIds.Contains))
         {
             return FriendlyFireStatsResult.Succeeded(
-                PlayStatsReportFormatter.FormatNoPriorityPlay(gamingDayLabel));
+                PlayStatsReportFormatter.FormatNoPriorityPlay(gamingDayAnchor));
         }
 
         return FriendlyFireStatsResult.Succeeded(
             PlayStatsReportFormatter.Format(
-                gamingDayLabel,
+                gamingDayAnchor,
                 players,
                 _prioritySteamIds,
                 PlayStatsCategories.All),

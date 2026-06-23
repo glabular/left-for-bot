@@ -14,14 +14,14 @@ public static class PlayStatsReportFormatter
     ];
 
     public static string Format(
-        DateOnly gamingDayLabel,
+        DateOnly gamingDayAnchor,
         IReadOnlyDictionary<string, PlayerDayStats> players,
         IReadOnlySet<string> prioritySteamIds,
         IReadOnlyList<PlayStatsCategory> categories)
     {
         var builder = new StringBuilder();
 
-        builder.AppendLine(FormatDayHeader(gamingDayLabel));
+        builder.AppendLine(FormatDayHeader(gamingDayAnchor));
         builder.AppendLine();
 
         for (var i = 0; i < categories.Count; i++)
@@ -37,14 +37,14 @@ public static class PlayStatsReportFormatter
         return builder.ToString().TrimEnd();
     }
 
-    public static string FormatDayHeader(DateOnly gamingDayLabel) =>
-        $"Статистика за {gamingDayLabel:dd.MM.yyyy} (МСК)";
+    public static string FormatDayHeader(DateOnly gamingDayAnchor) =>
+        $"Статистика за {gamingDayAnchor:dd.MM.yyyy} (МСК)";
 
-    public static string FormatNoPriorityPlay(DateOnly gamingDayLabel) =>
-        $"{FormatDayHeader(gamingDayLabel)}\n\nСвой состав за этот день на сервере не появлялся. Похоже, что не играли.";
+    public static string FormatNoPriorityPlay(DateOnly gamingDayAnchor) =>
+        $"{FormatDayHeader(gamingDayAnchor)}\n\nСвой состав за этот день на сервере не появлялся. Похоже, что не играли.";
 
-    public static string FormatNoLogsForDay(DateOnly gamingDayLabel) =>
-        $"{FormatDayHeader(gamingDayLabel)}\n\nЗа этот день на сервере нет playstats. Возможно, никто не играл.";
+    public static string FormatNoLogsForDay(DateOnly gamingDayAnchor) =>
+        $"{FormatDayHeader(gamingDayAnchor)}\n\nЗа этот день на сервере нет playstats. Возможно, никто не играл.";
 
     private static void AppendCategory(
         StringBuilder builder,
