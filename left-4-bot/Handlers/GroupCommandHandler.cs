@@ -22,7 +22,7 @@ public sealed class GroupCommandHandler
 
         /ff [дд.мм.гггг] — дружественный огонь (без даты — текущий день)
 
-        /stat — статистика за текущий день
+        /stat [дд.мм.гггг] — статистика за день (без даты — текущий)
 
         /server — как прописать сервер в игре
         /help — справка
@@ -100,7 +100,7 @@ public sealed class GroupCommandHandler
                 break;
 
             case "stat":
-                await HandleStatAsync(bot, message, cancellationToken);
+                await HandleStatAsync(bot, message, args, cancellationToken);
                 break;
 
             case "server":
@@ -312,14 +312,40 @@ public sealed class GroupCommandHandler
     private async Task HandleStatAsync(
         ITelegramBotClient bot,
         Message message,
+        string args,
         CancellationToken cancellationToken)
     {
+        Task<FriendlyFireStatsResult> statsTask;
+
+        if (string.IsNullOrWhiteSpace(args))
+        {
+            statsTask = _playStats.GetTodayStatsAsync(cancellationToken);
+        }
+        else if (!DateOnly.TryParseExact(
+            args,
+            "dd.MM.yyyy",
+            CultureInfo.InvariantCulture,
+            DateTimeStyles.None,
+            out var gamingDay))
+        {
+            await bot.SendMessage(
+                message.Chat.Id,
+                "Некорректная дата.\nТребуется формат /stat [дд.мм.гггг]  " +
+                "\n\nНапример\n/stat 01.02.2026\nИли без параметра, чтобы получить статистику за сегодня\n/stat",
+                cancellationToken: cancellationToken);
+            return;
+        }
+        else
+        {
+            statsTask = _playStats.GetStatsForGamingDayAsync(gamingDay, cancellationToken);
+        }
+
         await bot.SendMessage(
             message.Chat.Id,
             "Обрабатываю логи...",
             cancellationToken: cancellationToken);
 
-        var result = await _playStats.GetTodayStatsAsync(cancellationToken);
+        var result = await statsTask;
 
         if (result.UseHtmlParseMode)
         {
