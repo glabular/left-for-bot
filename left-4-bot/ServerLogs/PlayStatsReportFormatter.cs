@@ -21,15 +21,8 @@ public static class PlayStatsReportFormatter
     public static bool CategoryHasData(
         PlayStatsCategory category,
         IReadOnlyDictionary<string, PlayerDayStats> players,
-        IReadOnlySet<string> prioritySteamIds)
-    {
-        var (priorityPlayers, otherPlayers) = SelectCategoryLeaders(
-            category,
-            players,
-            prioritySteamIds);
-
-        return priorityPlayers.Count > 0 || otherPlayers.Count > 0;
-    }
+        IReadOnlySet<string> prioritySteamIds) =>
+        SelectCategoryLeaders(category, players).Count > 0;
 
     public static string FormatCategory(
         PlayStatsCategory category,
@@ -41,30 +34,17 @@ public static class PlayStatsReportFormatter
         builder.AppendLine(FormatCategoryTitle(category.Title));
         builder.AppendLine();
 
-        var (priorityPlayers, otherPlayers) = SelectCategoryLeaders(
-            category,
-            players,
-            prioritySteamIds);
+        var leaders = SelectCategoryLeaders(category, players);
 
-        for (var i = 0; i < priorityPlayers.Count; i++)
+        for (var i = 0; i < leaders.Count; i++)
         {
-            var player = priorityPlayers[i];
+            var player = leaders[i];
             var value = category.GetValue(player);
-            builder.AppendLine($"{TopPlaceEmojis[i]} {EscapeHtml(player.Name)} — {value}");
-        }
-
-        if (otherPlayers.Count > 0)
-        {
-            if (priorityPlayers.Count > 0)
-            {
-                builder.AppendLine();
-            }
-
-            foreach (var player in otherPlayers)
-            {
-                var value = category.GetValue(player);
-                builder.AppendLine($"{EscapeHtml(player.Name)} — {value}");
-            }
+            var line = FormatPlayerLine(
+                player.Name,
+                value,
+                prioritySteamIds.Contains(player.SteamId));
+            builder.AppendLine($"{TopPlaceEmojis[i]} {line}");
         }
 
         return builder.ToString().TrimEnd();
@@ -89,40 +69,24 @@ public static class PlayStatsReportFormatter
     public static string FormatNoLogsForDay(DateOnly gamingDayAnchor) =>
         $"{FormatDayHeader(gamingDayAnchor)}\n\nЗа этот день на сервере нет статистики. Возможно, никто не играл.";
 
-    private static (List<PlayerDayStats> Priority, List<PlayerDayStats> Others) SelectCategoryLeaders(
+    private static List<PlayerDayStats> SelectCategoryLeaders(
         PlayStatsCategory category,
-        IReadOnlyDictionary<string, PlayerDayStats> players,
-        IReadOnlySet<string> prioritySteamIds)
-    {
-        var withValue = players.Values
+        IReadOnlyDictionary<string, PlayerDayStats> players) =>
+        players.Values
             .Where(player => category.GetValue(player) > 0)
-            .ToList();
-
-        var priorityPlayers = withValue
-            .Where(player => prioritySteamIds.Contains(player.SteamId))
             .OrderByDescending(player => category.GetValue(player))
             .ThenBy(player => player.Name, StringComparer.OrdinalIgnoreCase)
             .Take(TopCount)
             .ToList();
 
-        var remainingSlots = TopCount - priorityPlayers.Count;
-        if (remainingSlots <= 0)
-        {
-            return (priorityPlayers, []);
-        }
-
-        var otherPlayers = withValue
-            .Where(player => !prioritySteamIds.Contains(player.SteamId))
-            .OrderByDescending(player => category.GetValue(player))
-            .ThenBy(player => player.Name, StringComparer.OrdinalIgnoreCase)
-            .Take(remainingSlots)
-            .ToList();
-
-        return (priorityPlayers, otherPlayers);
-    }
-
     private static string FormatCategoryTitle(string title) =>
         $"<b><u>{EscapeHtml(title)}</u></b>";
+
+    private static string FormatPlayerLine(string name, int value, bool isPriority)
+    {
+        var line = $"{EscapeHtml(name)} — {value}";
+        return isPriority ? $"<b>{line}</b>" : line;
+    }
 
     private static string EscapeHtml(string text) => WebUtility.HtmlEncode(text);
 }
