@@ -13,57 +13,37 @@ public static class PlayStatsReportFormatter
         "6️⃣", "7️⃣", "8️⃣", "9️⃣", "🔟",
     ];
 
-    public static string Format(
-        DateOnly gamingDayAnchor,
-        IReadOnlyDictionary<string, PlayerDayStats> players,
-        IReadOnlySet<string> prioritySteamIds,
-        IReadOnlyList<PlayStatsCategory> categories)
-    {
-        var builder = new StringBuilder();
-
-        builder.AppendLine(FormatDayHeader(gamingDayAnchor));
-        builder.AppendLine();
-
-        for (var i = 0; i < categories.Count; i++)
-        {
-            if (i > 0)
-            {
-                builder.AppendLine();
-            }
-
-            AppendCategory(builder, categories[i], players, prioritySteamIds);
-        }
-
-        return builder.ToString().TrimEnd();
-    }
+    public const string EmptyCategoriesIntro = "Нет данных:";
 
     public static string FormatDayHeader(DateOnly gamingDayAnchor) =>
         $"Статистика за {gamingDayAnchor:dd.MM.yyyy} (МСК)";
 
-    public static string FormatNoPriorityPlay(DateOnly gamingDayAnchor) =>
-        $"{FormatDayHeader(gamingDayAnchor)}\n\nСвой состав за этот день на сервере не появлялся. Похоже, что не играли.";
-
-    public static string FormatNoLogsForDay(DateOnly gamingDayAnchor) =>
-        $"{FormatDayHeader(gamingDayAnchor)}\n\nЗа этот день на сервере нет playstats. Возможно, никто не играл.";
-
-    private static void AppendCategory(
-        StringBuilder builder,
+    public static bool CategoryHasData(
         PlayStatsCategory category,
         IReadOnlyDictionary<string, PlayerDayStats> players,
         IReadOnlySet<string> prioritySteamIds)
     {
+        var (priorityPlayers, otherPlayers) = SelectCategoryLeaders(
+            category,
+            players,
+            prioritySteamIds);
+
+        return priorityPlayers.Count > 0 || otherPlayers.Count > 0;
+    }
+
+    public static string FormatCategory(
+        PlayStatsCategory category,
+        IReadOnlyDictionary<string, PlayerDayStats> players,
+        IReadOnlySet<string> prioritySteamIds)
+    {
+        var builder = new StringBuilder();
+
         builder.AppendLine($"<b>{EscapeHtml(category.Title)}</b>");
 
         var (priorityPlayers, otherPlayers) = SelectCategoryLeaders(
             category,
             players,
             prioritySteamIds);
-
-        if (priorityPlayers.Count == 0 && otherPlayers.Count == 0)
-        {
-            builder.AppendLine("Нет данных за день");
-            return;
-        }
 
         for (var i = 0; i < priorityPlayers.Count; i++)
         {
@@ -72,19 +52,42 @@ public static class PlayStatsReportFormatter
             builder.AppendLine($"{TopPlaceEmojis[i]} {EscapeHtml(player.Name)} — {value}");
         }
 
-        if (otherPlayers.Count == 0)
+        if (otherPlayers.Count > 0)
         {
-            return;
+            builder.AppendLine();
+
+            foreach (var player in otherPlayers)
+            {
+                var value = category.GetValue(player);
+                builder.AppendLine($"{EscapeHtml(player.Name)} — {value}");
+            }
         }
 
-        builder.AppendLine();
-
-        foreach (var player in otherPlayers)
-        {
-            var value = category.GetValue(player);
-            builder.AppendLine($"{EscapeHtml(player.Name)} — {value}");
-        }
+        return builder.ToString().TrimEnd();
     }
+
+    public static string FormatEmptyCategories(IReadOnlyList<PlayStatsCategory> categories)
+    {
+        var builder = new StringBuilder();
+
+        for (var i = 0; i < categories.Count; i++)
+        {
+            if (i > 0)
+            {
+                builder.AppendLine();
+            }
+
+            builder.Append($"<b>{EscapeHtml(categories[i].Title)}</b>");
+        }
+
+        return builder.ToString();
+    }
+
+    public static string FormatNoPriorityPlay(DateOnly gamingDayAnchor) =>
+        $"{FormatDayHeader(gamingDayAnchor)}\n\nСвой состав за этот день на сервере не появлялся. Похоже, что не играли.";
+
+    public static string FormatNoLogsForDay(DateOnly gamingDayAnchor) =>
+        $"{FormatDayHeader(gamingDayAnchor)}\n\nЗа этот день на сервере нет статистики. Возможно, никто не играл.";
 
     private static (List<PlayerDayStats> Priority, List<PlayerDayStats> Others) SelectCategoryLeaders(
         PlayStatsCategory category,

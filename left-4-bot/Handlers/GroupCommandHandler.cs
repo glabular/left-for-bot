@@ -315,7 +315,7 @@ public sealed class GroupCommandHandler
         string args,
         CancellationToken cancellationToken)
     {
-        Task<FriendlyFireStatsResult> statsTask;
+        Task<PlayStatsResult> statsTask;
 
         if (string.IsNullOrWhiteSpace(args))
         {
@@ -347,21 +347,11 @@ public sealed class GroupCommandHandler
 
         var result = await statsTask;
 
-        if (result.UseHtmlParseMode)
-        {
-            await bot.SendMessage(
-                message.Chat.Id,
-                result.Message,
-                parseMode: ParseMode.Html,
-                cancellationToken: cancellationToken);
-        }
-        else
-        {
-            await bot.SendMessage(
-                message.Chat.Id,
-                result.Message,
-                cancellationToken: cancellationToken);
-        }
+        await PlayStatsMessageSender.SendAsync(
+            bot,
+            message.Chat.Id,
+            result.Messages,
+            cancellationToken);
     }
 
     private static async Task HandleHelpAsync(

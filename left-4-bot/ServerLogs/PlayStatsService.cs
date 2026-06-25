@@ -20,10 +20,10 @@ public sealed class PlayStatsService
             StringComparer.Ordinal);
     }
 
-    public Task<FriendlyFireStatsResult> GetTodayStatsAsync(CancellationToken cancellationToken) =>
+    public Task<PlayStatsResult> GetTodayStatsAsync(CancellationToken cancellationToken) =>
         GetStatsForGamingDayAsync(GamingDay.GetCurrentAnchor(_gamingDayOptions), cancellationToken);
 
-    public async Task<FriendlyFireStatsResult> GetStatsForGamingDayAsync(
+    public async Task<PlayStatsResult> GetStatsForGamingDayAsync(
         DateOnly gamingDayAnchor,
         CancellationToken cancellationToken)
     {
@@ -33,31 +33,26 @@ public sealed class PlayStatsService
 
         if (!download.IsSuccess)
         {
-            return FriendlyFireStatsResult.Failed(
+            return PlayStatsReportBuilder.BuildError(
                 FormatError(MapDownloadError(download.Message)));
         }
 
         if (download.LocalFilePaths.Count == 0)
         {
-            return FriendlyFireStatsResult.Succeeded(
-                PlayStatsReportFormatter.FormatNoLogsForDay(gamingDayAnchor));
+            return PlayStatsReportBuilder.BuildNoLogs(gamingDayAnchor);
         }
 
         var players = PlayStatsDayAggregator.ParseFiles(download.LocalFilePaths);
 
         if (!players.Keys.Any(_prioritySteamIds.Contains))
         {
-            return FriendlyFireStatsResult.Succeeded(
-                PlayStatsReportFormatter.FormatNoPriorityPlay(gamingDayAnchor));
+            return PlayStatsReportBuilder.BuildNoPriorityPlay(gamingDayAnchor);
         }
 
-        return FriendlyFireStatsResult.Succeeded(
-            PlayStatsReportFormatter.Format(
-                gamingDayAnchor,
-                players,
-                _prioritySteamIds,
-                PlayStatsCategories.All),
-            useHtmlParseMode: true);
+        return PlayStatsReportBuilder.BuildSuccess(
+            gamingDayAnchor,
+            players,
+            _prioritySteamIds);
     }
 
     private static string FormatError(string details) =>
