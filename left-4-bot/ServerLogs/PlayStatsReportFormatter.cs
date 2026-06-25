@@ -38,7 +38,8 @@ public static class PlayStatsReportFormatter
     {
         var builder = new StringBuilder();
 
-        builder.AppendLine($"<b>{EscapeHtml(category.Title)}</b>");
+        builder.AppendLine(FormatCategoryTitle(category.Title));
+        builder.AppendLine();
 
         var (priorityPlayers, otherPlayers) = SelectCategoryLeaders(
             category,
@@ -54,7 +55,10 @@ public static class PlayStatsReportFormatter
 
         if (otherPlayers.Count > 0)
         {
-            builder.AppendLine();
+            if (priorityPlayers.Count > 0)
+            {
+                builder.AppendLine();
+            }
 
             foreach (var player in otherPlayers)
             {
@@ -72,15 +76,11 @@ public static class PlayStatsReportFormatter
 
         for (var i = 0; i < categories.Count; i++)
         {
-            if (i > 0)
-            {
-                builder.AppendLine();
-            }
-
-            builder.Append($"<b>{EscapeHtml(categories[i].Title)}</b>");
+            builder.AppendLine(categories[i].Title);
+            builder.AppendLine();
         }
 
-        return builder.ToString();
+        return builder.ToString().TrimEnd();
     }
 
     public static string FormatNoPriorityPlay(DateOnly gamingDayAnchor) =>
@@ -120,6 +120,9 @@ public static class PlayStatsReportFormatter
 
         return (priorityPlayers, otherPlayers);
     }
+
+    private static string FormatCategoryTitle(string title) =>
+        $"<b><u>{EscapeHtml(title)}</u></b>";
 
     private static string EscapeHtml(string text) => WebUtility.HtmlEncode(text);
 }
