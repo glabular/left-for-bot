@@ -8,5 +8,8 @@ public static class PlayStatsCategories
         new("Убито особых заражённых", player => player.SiKilled),
         new("Выстрелов в голову", player => player.Headshots),
         new("Урон по ведьме", player => player.WitchDamage),
+        new("Урон по танку", player => player.TankDamage),
+        new("Скиты камней", player => player.RockSkeets),
+        new("Мили по танку", player => player.MeleesOnTank),
     ];
 }

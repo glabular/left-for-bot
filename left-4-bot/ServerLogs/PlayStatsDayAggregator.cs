@@ -39,6 +39,9 @@ public static class PlayStatsDayAggregator
                         + player.HeadshotsSniper
                         + player.HeadshotsPistol;
                     aggregate.WitchDamage += player.WitchDamage;
+                    aggregate.TankDamage += player.TankDamage;
+                    aggregate.RockSkeets += player.RockSkeets;
+                    aggregate.MeleesOnTank += player.MeleesOnTank;
 
                     if (!string.IsNullOrEmpty(player.PlayerName))
                     {

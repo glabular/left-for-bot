@@ -19,4 +19,10 @@ public sealed class PlayerDayStats
     public int Headshots { get; set; }
 
     public int WitchDamage { get; set; }
+
+    public int TankDamage { get; set; }
+
+    public int RockSkeets { get; set; }
+
+    public int MeleesOnTank { get; set; }
 }
