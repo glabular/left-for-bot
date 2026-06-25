@@ -5,15 +5,18 @@ namespace left_4_bot.ServerLogs;
 public sealed class PlayStatsService
 {
     private readonly ServerLogSyncService _logSync;
+    private readonly FriendlyFireStatsService _friendlyFireStats;
     private readonly GamingDayOptions _gamingDayOptions;
     private readonly HashSet<string> _prioritySteamIds;
 
     public PlayStatsService(
         ServerLogSyncService logSync,
+        FriendlyFireStatsService friendlyFireStats,
         IOptions<GamingDayOptions> gamingDayOptions,
         IOptions<PriorityPlayersOptions> priorityOptions)
     {
         _logSync = logSync;
+        _friendlyFireStats = friendlyFireStats;
         _gamingDayOptions = gamingDayOptions.Value;
         _prioritySteamIds = new HashSet<string>(
             priorityOptions.Value.SteamIds,
@@ -29,30 +32,56 @@ public sealed class PlayStatsService
     {
         var bounds = GamingDay.GetBounds(gamingDayAnchor, _gamingDayOptions);
         var calendarDates = GamingDay.GetCalendarDatesToDownload(bounds);
-        var download = await _logSync.DownloadPlayStatsFilesAsync(calendarDates, cancellationToken);
 
-        if (!download.IsSuccess)
+        var friendlyFire = await _friendlyFireStats.GetSectionDataAsync(
+            gamingDayAnchor,
+            _prioritySteamIds,
+            cancellationToken);
+        var playStatsDownload = await _logSync.DownloadPlayStatsFilesAsync(calendarDates, cancellationToken);
+
+        if (!playStatsDownload.IsSuccess
+            && friendlyFire.State == FriendlyFireSectionState.DownloadFailed)
         {
             return PlayStatsReportBuilder.BuildError(
-                FormatError(MapDownloadError(download.Message)));
+                FormatError(MapDownloadError(playStatsDownload.Message)));
         }
 
-        if (download.LocalFilePaths.Count == 0)
+        Dictionary<string, PlayerDayStats>? players = null;
+        var playStatsAvailable = playStatsDownload.IsSuccess && playStatsDownload.LocalFilePaths.Count > 0;
+
+        if (playStatsAvailable)
         {
-            return PlayStatsReportBuilder.BuildNoLogs(gamingDayAnchor);
+            players = PlayStatsDayAggregator.ParseFiles(playStatsDownload.LocalFilePaths);
         }
 
-        var players = PlayStatsDayAggregator.ParseFiles(download.LocalFilePaths);
+        var priorityPlayerPresent = friendlyFire.PriorityPlayerPresent
+            || (players?.Keys.Any(_prioritySteamIds.Contains) ?? false);
 
-        if (!players.Keys.Any(_prioritySteamIds.Contains))
+        if (!priorityPlayerPresent)
         {
             return PlayStatsReportBuilder.BuildNoPriorityPlay(gamingDayAnchor);
         }
 
-        return PlayStatsReportBuilder.BuildSuccess(
-            gamingDayAnchor,
-            players,
-            _prioritySteamIds);
+        var messages = new List<PlayStatsOutboundMessage>
+        {
+            new()
+            {
+                Text = PlayStatsReportFormatter.FormatDayHeader(gamingDayAnchor),
+            },
+        };
+
+        messages.AddRange(FriendlyFireReportBuilder.BuildMessages(friendlyFire, _prioritySteamIds));
+
+        var includeFriendlyFireInEmpty = friendlyFire.State
+            is FriendlyFireSectionState.NoLogs
+            or FriendlyFireSectionState.DownloadFailed;
+
+        messages.AddRange(PlayStatsReportBuilder.BuildCategoryMessages(
+            players ?? new Dictionary<string, PlayerDayStats>(StringComparer.Ordinal),
+            _prioritySteamIds,
+            includeFriendlyFireInEmpty));
+
+        return PlayStatsResult.Succeeded(messages);
     }
 
     private static string FormatError(string details) =>

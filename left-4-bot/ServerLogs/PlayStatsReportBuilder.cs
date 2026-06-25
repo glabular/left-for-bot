@@ -2,10 +2,10 @@ namespace left_4_bot.ServerLogs;
 
 public static class PlayStatsReportBuilder
 {
-    public static PlayStatsResult BuildSuccess(
-        DateOnly gamingDayAnchor,
+    public static IReadOnlyList<PlayStatsOutboundMessage> BuildCategoryMessages(
         IReadOnlyDictionary<string, PlayerDayStats> players,
-        IReadOnlySet<string> prioritySteamIds)
+        IReadOnlySet<string> prioritySteamIds,
+        bool includeFriendlyFireInEmpty)
     {
         var withData = new List<PlayStatsCategory>();
         var withoutData = new List<PlayStatsCategory>();
@@ -22,13 +22,7 @@ public static class PlayStatsReportBuilder
             }
         }
 
-        var messages = new List<PlayStatsOutboundMessage>
-        {
-            new()
-            {
-                Text = PlayStatsReportFormatter.FormatDayHeader(gamingDayAnchor),
-            },
-        };
+        var messages = new List<PlayStatsOutboundMessage>();
 
         foreach (var category in withData)
         {
@@ -40,33 +34,25 @@ public static class PlayStatsReportBuilder
             });
         }
 
-        if (withoutData.Count > 0)
+        if (!includeFriendlyFireInEmpty && withoutData.Count == 0)
         {
-            messages.Add(new PlayStatsOutboundMessage
-            {
-                Text = PlayStatsReportFormatter.EmptyCategoriesIntro,
-                DisableNotification = true,
-            });
-
-            messages.Add(new PlayStatsOutboundMessage
-            {
-                Text = PlayStatsReportFormatter.FormatEmptyCategories(withoutData),
-                UseHtml = true,
-                DisableNotification = true,
-            });
+            return messages;
         }
 
-        return PlayStatsResult.Succeeded(messages);
-    }
+        messages.Add(new PlayStatsOutboundMessage
+        {
+            Text = PlayStatsReportFormatter.EmptyCategoriesIntro,
+            DisableNotification = true,
+        });
 
-    public static PlayStatsResult BuildNoLogs(DateOnly gamingDayAnchor) =>
-        PlayStatsResult.Succeeded(
-        [
-            new PlayStatsOutboundMessage
-            {
-                Text = PlayStatsReportFormatter.FormatNoLogsForDay(gamingDayAnchor),
-            },
-        ]);
+        messages.Add(new PlayStatsOutboundMessage
+        {
+            Text = PlayStatsReportFormatter.FormatEmptyCategories(withoutData, includeFriendlyFireInEmpty),
+            DisableNotification = true,
+        });
+
+        return messages;
+    }
 
     public static PlayStatsResult BuildNoPriorityPlay(DateOnly gamingDayAnchor) =>
         PlayStatsResult.Succeeded(

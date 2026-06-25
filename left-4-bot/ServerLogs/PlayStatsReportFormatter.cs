@@ -1,4 +1,3 @@
-using System.Net;
 using System.Text;
 
 namespace left_4_bot.ServerLogs;
@@ -6,12 +5,6 @@ namespace left_4_bot.ServerLogs;
 public static class PlayStatsReportFormatter
 {
     private const int TopCount = 10;
-
-    private static readonly string[] TopPlaceEmojis =
-    [
-        "1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣",
-        "6️⃣", "7️⃣", "8️⃣", "9️⃣", "🔟",
-    ];
 
     public const string EmptyCategoriesIntro = "Нет данных:";
 
@@ -31,7 +24,7 @@ public static class PlayStatsReportFormatter
     {
         var builder = new StringBuilder();
 
-        builder.AppendLine(FormatCategoryTitle(category.Title));
+        builder.AppendLine(StatReportFormatting.FormatCategoryTitle(category.Title));
         builder.AppendLine();
 
         var leaders = SelectCategoryLeaders(category, players);
@@ -44,20 +37,36 @@ public static class PlayStatsReportFormatter
                 player.Name,
                 value,
                 prioritySteamIds.Contains(player.SteamId));
-            builder.AppendLine($"{TopPlaceEmojis[i]} {line}");
+            builder.AppendLine($"{StatReportFormatting.TopPlaceEmojis[i]} {line}");
         }
 
         return builder.ToString().TrimEnd();
     }
 
-    public static string FormatEmptyCategories(IReadOnlyList<PlayStatsCategory> categories)
+    public static string FormatEmptyCategories(
+        IReadOnlyList<PlayStatsCategory> categories,
+        bool includeFriendlyFire)
     {
         var builder = new StringBuilder();
+        var wroteAny = false;
+
+        if (includeFriendlyFire)
+        {
+            builder.AppendLine(StatReportFormatting.FriendlyFireCategoryTitle);
+            builder.AppendLine();
+            wroteAny = true;
+        }
 
         for (var i = 0; i < categories.Count; i++)
         {
+            if (wroteAny)
+            {
+                builder.AppendLine();
+            }
+
             builder.AppendLine(categories[i].Title);
             builder.AppendLine();
+            wroteAny = true;
         }
 
         return builder.ToString().TrimEnd();
@@ -65,9 +74,6 @@ public static class PlayStatsReportFormatter
 
     public static string FormatNoPriorityPlay(DateOnly gamingDayAnchor) =>
         $"{FormatDayHeader(gamingDayAnchor)}\n\nСвой состав за этот день на сервере не появлялся. Похоже, что не играли.";
-
-    public static string FormatNoLogsForDay(DateOnly gamingDayAnchor) =>
-        $"{FormatDayHeader(gamingDayAnchor)}\n\nЗа этот день на сервере нет статистики. Возможно, никто не играл.";
 
     private static List<PlayerDayStats> SelectCategoryLeaders(
         PlayStatsCategory category,
@@ -79,14 +85,9 @@ public static class PlayStatsReportFormatter
             .Take(TopCount)
             .ToList();
 
-    private static string FormatCategoryTitle(string title) =>
-        $"<b><u>{EscapeHtml(title)}</u></b>";
-
     private static string FormatPlayerLine(string name, int value, bool isPriority)
     {
-        var line = $"{EscapeHtml(name)} — {value}";
+        var line = $"{StatReportFormatting.EscapeHtml(name)} — {value}";
         return isPriority ? $"<b>{line}</b>" : line;
     }
-
-    private static string EscapeHtml(string text) => WebUtility.HtmlEncode(text);
 }

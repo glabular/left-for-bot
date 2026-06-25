@@ -20,8 +20,6 @@ public sealed class GroupCommandHandler
         /removemap <англ.> — удалить из любимых        
         Названия кампаний — на английском (например: Dark Carnival)
 
-        /ff [дд.мм.гггг] — дружественный огонь (без даты — текущий день)
-
         /stat [дд.мм.гггг] — статистика за день (без даты — текущий)
 
         /server — как прописать сервер в игре
@@ -47,18 +45,15 @@ public sealed class GroupCommandHandler
 
     private readonly GoldenPoolService _goldenPool;
     private readonly GoldenPoolEditLimiter _editLimiter;
-    private readonly FriendlyFireStatsService _friendlyFireStats;
     private readonly PlayStatsService _playStats;
 
     public GroupCommandHandler(
         GoldenPoolService goldenPool,
         GoldenPoolEditLimiter editLimiter,
-        FriendlyFireStatsService friendlyFireStats,
         PlayStatsService playStats)
     {
         _goldenPool = goldenPool;
         _editLimiter = editLimiter;
-        _friendlyFireStats = friendlyFireStats;
         _playStats = playStats;
     }
 
@@ -93,10 +88,6 @@ public sealed class GroupCommandHandler
 
             case "help":
                 await HandleHelpAsync(bot, message, cancellationToken);
-                break;
-
-            case "ff":
-                await HandleFriendlyFireAsync(bot, message, args, cancellationToken);
                 break;
 
             case "stat":
@@ -252,61 +243,6 @@ public sealed class GroupCommandHandler
             message.Chat.Id,
             campaign.DisplayName,
             cancellationToken: cancellationToken);
-    }
-
-    private async Task HandleFriendlyFireAsync(
-        ITelegramBotClient bot,
-        Message message,
-        string args,
-        CancellationToken cancellationToken)
-    {
-        Task<FriendlyFireStatsResult> statsTask;
-
-        if (string.IsNullOrWhiteSpace(args))
-        {
-            statsTask = _friendlyFireStats.GetTodayStatsAsync(cancellationToken);
-        }
-        else if (!DateOnly.TryParseExact(
-            args,
-            "dd.MM.yyyy",
-            CultureInfo.InvariantCulture,
-            DateTimeStyles.None,
-            out var gamingDay))
-        {
-            await bot.SendMessage(
-                message.Chat.Id,
-                "Некорректная дата.\nТребуется формат /ff [дд.мм.гггг]  " +
-                "\n\nНапример\n/ff 01.02.2026\nИли без параметра, чтобы получить статистику за сегодня\n/ff",
-                cancellationToken: cancellationToken);
-            return;
-        }
-        else
-        {
-            statsTask = _friendlyFireStats.GetStatsForGamingDayAsync(gamingDay, cancellationToken);
-        }
-
-        await bot.SendMessage(
-            message.Chat.Id,
-            "Обрабатываю логи...",
-            cancellationToken: cancellationToken);
-
-        var result = await statsTask;
-
-        if (result.UseHtmlParseMode)
-        {
-            await bot.SendMessage(
-                message.Chat.Id,
-                result.Message,
-                parseMode: ParseMode.Html,
-                cancellationToken: cancellationToken);
-        }
-        else
-        {
-            await bot.SendMessage(
-                message.Chat.Id,
-                result.Message,
-                cancellationToken: cancellationToken);
-        }
     }
 
     private async Task HandleStatAsync(
