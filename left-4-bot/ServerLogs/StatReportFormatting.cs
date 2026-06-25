@@ -16,4 +16,33 @@ public static class StatReportFormatting
         $"<b><u>{EscapeHtml(title)}</u></b>";
 
     public static string EscapeHtml(string text) => WebUtility.HtmlEncode(text);
+
+    public static string FormatTopPlace(int placeIndex) =>
+        placeIndex >= 0 && placeIndex < TopPlaceEmojis.Length
+            ? TopPlaceEmojis[placeIndex]
+            : TopPlaceEmojis[^1];
+
+    public static IEnumerable<(int PlaceIndex, T Entry)> RankTopEntries<T>(
+        IEnumerable<T> entries,
+        Func<T, int> getScore,
+        IComparer<T>? tieBreaker = null,
+        int maxCount = 10)
+    {
+        var ordered = tieBreaker is null
+            ? entries.OrderByDescending(getScore)
+            : entries.OrderByDescending(getScore).ThenBy(e => e, tieBreaker);
+
+        var list = ordered.Take(maxCount).ToList();
+        var placeIndex = 0;
+
+        for (var i = 0; i < list.Count; i++)
+        {
+            if (i > 0 && getScore(list[i]) != getScore(list[i - 1]))
+            {
+                placeIndex = i;
+            }
+
+            yield return (placeIndex, list[i]);
+        }
+    }
 }

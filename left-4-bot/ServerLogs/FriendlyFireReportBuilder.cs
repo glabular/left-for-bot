@@ -77,12 +77,12 @@ public static class FriendlyFireReportBuilder
         }
         else
         {
-            for (var i = 0; i < Math.Min(TopCount, topOrdered.Count); i++)
+            var topEntries = StatReportFormatting.RankTopEntries(
+                topOrdered, GetAttackerTotal, AttackerNameComparer, TopCount);
+
+            foreach (var (placeIndex, attacker) in topEntries)
             {
-                var attacker = topOrdered[i];
-                var total = GetAttackerTotal(attacker);
-                builder.AppendLine(
-                    $"{StatReportFormatting.TopPlaceEmojis[i]} {StatReportFormatting.EscapeHtml(attacker.Name)} — {total} {PluralizeHits(total)}");
+                builder.AppendLine(FormatTopAttackerLine(attacker, placeIndex));
             }
         }
 
@@ -96,6 +96,15 @@ public static class FriendlyFireReportBuilder
         }
 
         return builder.ToString().TrimEnd();
+    }
+
+    private static string FormatTopAttackerLine(FriendlyFireAttackerStats attacker, int placeIndex)
+    {
+        var total = GetAttackerTotal(attacker);
+        var place = StatReportFormatting.FormatTopPlace(placeIndex);
+        var name = StatReportFormatting.EscapeHtml(attacker.Name);
+
+        return $"{place} {name} — {total} {PluralizeHits(total)}";
     }
 
     private static string? FormatOthersBlock(
@@ -186,6 +195,10 @@ public static class FriendlyFireReportBuilder
 
         return "попаданий";
     }
+
+    private static readonly IComparer<FriendlyFireAttackerStats> AttackerNameComparer =
+        Comparer<FriendlyFireAttackerStats>.Create(
+            (a, b) => string.Compare(a.Name, b.Name, StringComparison.OrdinalIgnoreCase));
 
     private static IEnumerable<FriendlyFireAttackerStats> OrderAttackers(
         IEnumerable<FriendlyFireAttackerStats> attackers) =>
