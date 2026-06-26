@@ -112,7 +112,9 @@ public static class FriendlyFireReportBuilder
         IReadOnlySet<string> prioritySteamIds)
     {
         var otherAttackers = OrderAttackers(
-            attackers.Values.Where(a => !prioritySteamIds.Contains(a.SteamId))).ToList();
+            attackers.Values
+                .Where(a => !prioritySteamIds.Contains(a.SteamId))
+                .Where(a => HasPriorityVictims(a, prioritySteamIds))).ToList();
 
         if (otherAttackers.Count == 0)
         {
@@ -126,7 +128,12 @@ public static class FriendlyFireReportBuilder
 
         foreach (var attacker in otherAttackers)
         {
-            AppendAttackerDetails(builder, attacker, prioritySteamIds, MaxVictimsPerAttackerInOthers);
+            AppendAttackerDetails(
+                builder,
+                attacker,
+                prioritySteamIds,
+                MaxVictimsPerAttackerInOthers,
+                onlyPriorityVictims: true);
         }
 
         return builder.ToString().TrimEnd();
@@ -136,12 +143,18 @@ public static class FriendlyFireReportBuilder
         StringBuilder builder,
         FriendlyFireAttackerStats attacker,
         IReadOnlySet<string> prioritySteamIds,
-        int? maxVictims = null)
+        int? maxVictims = null,
+        bool onlyPriorityVictims = false)
     {
         var total = GetAttackerTotal(attacker);
         builder.AppendLine($"{StatReportFormatting.EscapeHtml(attacker.Name)} ({total})");
 
         var victims = OrderVictims(attacker);
+        if (onlyPriorityVictims)
+        {
+            victims = victims.Where(v => prioritySteamIds.Contains(v.SteamId));
+        }
+
         if (maxVictims is not null)
         {
             victims = victims.Take(maxVictims.Value);
@@ -174,6 +187,11 @@ public static class FriendlyFireReportBuilder
         IEnumerable<FriendlyFireAttackerStats> attackers,
         IReadOnlySet<string> prioritySteamIds) =>
         OrderAttackers(attackers.Where(a => prioritySteamIds.Contains(a.SteamId))).ToList();
+
+    private static bool HasPriorityVictims(
+        FriendlyFireAttackerStats attacker,
+        IReadOnlySet<string> prioritySteamIds) =>
+        attacker.Victims.Values.Any(v => prioritySteamIds.Contains(v.SteamId));
 
     private static int GetAttackerTotal(FriendlyFireAttackerStats attacker) =>
         attacker.Victims.Values.Sum(v => v.HitCount);
