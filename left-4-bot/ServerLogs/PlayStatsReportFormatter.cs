@@ -4,7 +4,8 @@ namespace left_4_bot.ServerLogs;
 
 public static class PlayStatsReportFormatter
 {
-    private const int TopCount = 10;
+    private const int MaxPlaceIndexWithPriority = 9;
+    private const int MaxPlaceIndexWithoutPriority = 2;
 
     public const string EmptyCategoriesIntro = "Нет данных:";
 
@@ -27,11 +28,18 @@ public static class PlayStatsReportFormatter
         builder.AppendLine(StatReportFormatting.FormatCategoryTitle(category.Title));
         builder.AppendLine();
 
-        foreach (var (placeIndex, player) in StatReportFormatting.RankTopEntries(
-                     players.Values.Where(player => category.GetValue(player) > 0),
-                     category.GetValue,
-                     PlayerNameComparer,
-                     TopCount))
+        var ranked = StatReportFormatting.RankAllEntries(
+            players.Values.Where(player => category.GetValue(player) > 0),
+            category.GetValue,
+            PlayerNameComparer).ToList();
+
+        var placeCutoff = StatReportFormatting.ResolvePlaceCutoff(
+            ranked,
+            player => prioritySteamIds.Contains(player.SteamId),
+            MaxPlaceIndexWithPriority,
+            MaxPlaceIndexWithoutPriority);
+
+        foreach (var (placeIndex, player) in ranked.Where(entry => entry.PlaceIndex <= placeCutoff))
         {
             var value = category.GetValue(player);
             var line = FormatPlayerLine(

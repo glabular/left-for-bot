@@ -45,4 +45,64 @@ public static class StatReportFormatting
             yield return (placeIndex, list[i]);
         }
     }
+
+    public static IEnumerable<(int PlaceIndex, T Entry)> RankAllEntries<T>(
+        IEnumerable<T> entries,
+        Func<T, int> getScore,
+        IComparer<T>? tieBreaker = null)
+    {
+        var ordered = tieBreaker is null
+            ? entries.OrderByDescending(getScore)
+            : entries.OrderByDescending(getScore).ThenBy(e => e, tieBreaker);
+
+        var list = ordered.ToList();
+        var placeIndex = 0;
+
+        for (var i = 0; i < list.Count; i++)
+        {
+            if (i > 0 && getScore(list[i]) != getScore(list[i - 1]))
+            {
+                placeIndex = i;
+            }
+
+            yield return (placeIndex, list[i]);
+        }
+    }
+
+    public static int ResolvePlaceCutoff<T>(
+        IReadOnlyList<(int PlaceIndex, T Entry)> ranked,
+        Func<T, bool> isPriority,
+        int maxPlaceWithPriority,
+        int maxPlaceWithoutPriority)
+    {
+        var worstPriorityPlace = -1;
+        var worstPriorityPlaceInWindow = -1;
+
+        foreach (var (placeIndex, entry) in ranked)
+        {
+            if (!isPriority(entry))
+            {
+                continue;
+            }
+
+            worstPriorityPlace = Math.Max(worstPriorityPlace, placeIndex);
+
+            if (placeIndex <= maxPlaceWithPriority)
+            {
+                worstPriorityPlaceInWindow = Math.Max(worstPriorityPlaceInWindow, placeIndex);
+            }
+        }
+
+        if (worstPriorityPlace < 0)
+        {
+            return maxPlaceWithoutPriority;
+        }
+
+        if (worstPriorityPlaceInWindow >= 0)
+        {
+            return worstPriorityPlaceInWindow;
+        }
+
+        return Math.Min(worstPriorityPlace, maxPlaceWithPriority);
+    }
 }
