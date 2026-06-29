@@ -9,4 +9,8 @@ public sealed class RconOptions
     public int Port { get; set; } = 27217;
 
     public string Password { get; set; } = "";
+
+    public int RestartPollIntervalSeconds { get; set; } = 5;
+
+    public int RestartWaitTimeoutSeconds { get; set; } = 120;
 }

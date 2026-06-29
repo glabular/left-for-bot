@@ -23,8 +23,10 @@ public sealed class GroupCommandHandler
 
         /stat [дд.мм.гггг] — статистика за день (без даты — текущий)
 
-        /status — статус игрового сервера (онлайн, карта, игроки)
+        /status — статус сервера
+        /restart да|yes — перезагрузить сервер
         /server — как прописать сервер в игре
+
         /help — справка
         """;
 
@@ -45,21 +47,36 @@ public sealed class GroupCommandHandler
     private const string EmptyPoolText =
         "Золотой пул пуст.\n\nИспользуйте /addmap <название на английском>\n\nНапример:\n    /addmap Dark Carnival";
 
+    private const string RestartInstructionText =
+        """
+        Во избежание случайной перезагрузки команде требуется параметр подтвержения.
+
+        Чтобы перезагрузить сервер, отправьте:
+            /restart да
+        или
+            /restart yes
+
+        Команда /restart без параметра сервер не перезагружает.
+        """;
+
     private readonly GoldenPoolService _goldenPool;
     private readonly GoldenPoolEditLimiter _editLimiter;
     private readonly PlayStatsService _playStats;
     private readonly ServerRconService _serverRcon;
+    private readonly ServerRestartService _restartService;
 
     public GroupCommandHandler(
         GoldenPoolService goldenPool,
         GoldenPoolEditLimiter editLimiter,
         PlayStatsService playStats,
-        ServerRconService serverRcon)
+        ServerRconService serverRcon,
+        ServerRestartService restartService)
     {
         _goldenPool = goldenPool;
         _editLimiter = editLimiter;
         _playStats = playStats;
         _serverRcon = serverRcon;
+        _restartService = restartService;
     }
 
     public async Task HandleAsync(
@@ -101,6 +118,10 @@ public sealed class GroupCommandHandler
 
             case "status":
                 await HandleStatusAsync(bot, message, cancellationToken);
+                break;
+
+            case "restart":
+                await HandleRestartAsync(bot, message, args, cancellationToken);
                 break;
 
             case "server":
@@ -298,6 +319,93 @@ public sealed class GroupCommandHandler
             result.Messages,
             cancellationToken);
     }
+
+    private async Task HandleRestartAsync(
+        ITelegramBotClient bot,
+        Message message,
+        string args,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(args))
+        {
+            await bot.SendMessage(
+                message.Chat.Id,
+                RestartInstructionText,
+                cancellationToken: cancellationToken);
+            return;
+        }
+
+        if (!IsRestartConfirmation(args))
+        {
+            await bot.SendMessage(
+                message.Chat.Id,
+                $"Неверный параметр.\n\n{RestartInstructionText}",
+                cancellationToken: cancellationToken);
+            return;
+        }
+
+        var configError = _serverRcon.GetConfigurationError();
+        if (configError is not null)
+        {
+            await bot.SendMessage(
+                message.Chat.Id,
+                configError,
+                cancellationToken: cancellationToken);
+            return;
+        }
+
+        var begin = await _restartService.TrySendQuitAsync(
+            message.From?.Id,
+            message.From?.Username,
+            cancellationToken);
+
+        if (begin is not null)
+        {
+            await bot.SendMessage(
+                message.Chat.Id,
+                begin.UserMessage,
+                cancellationToken: cancellationToken);
+            return;
+        }
+
+        await bot.SendMessage(
+            message.Chat.Id,
+            "Команда перезагрузки успешно отправлена, жду поднятия сервера…",
+            cancellationToken: cancellationToken);
+
+        var chatId = message.Chat.Id;
+        _ = WaitForRestartAndNotifyAsync(bot, chatId, cancellationToken);
+    }
+
+    private async Task WaitForRestartAndNotifyAsync(
+        ITelegramBotClient bot,
+        ChatId chatId,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var outcome = await _restartService.WaitForServerOnlineAsync(cancellationToken);
+
+            await bot.SendMessage(
+                chatId,
+                outcome.UserMessage,
+                cancellationToken: cancellationToken);
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        catch (Exception)
+        {
+            await bot.SendMessage(
+                chatId,
+                "Не удалось дождаться поднятия сервера.",
+                cancellationToken: CancellationToken.None);
+        }
+    }
+
+    private static bool IsRestartConfirmation(string args) =>
+        args.Trim().Equals("да", StringComparison.OrdinalIgnoreCase)
+        || args.Trim().Equals("yes", StringComparison.OrdinalIgnoreCase);
 
     private async Task HandleStatusAsync(
         ITelegramBotClient bot,

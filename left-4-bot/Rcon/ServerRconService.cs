@@ -9,7 +9,7 @@ public sealed class ServerRconService
     private const int TelegramMessageLimit = 4096;
     private const string TruncationSuffix = "\n\n… (обрезано)";
 
-    private const string SetupHint =
+    public const string SetupHint =
         "RCON не настроен. Выполните:\n" +
         "  dotnet user-secrets set \"Rcon:Host\" \"46.174.48.12\"\n" +
         "  dotnet user-secrets set \"Rcon:Port\" \"27217\"\n" +
@@ -22,7 +22,34 @@ public sealed class ServerRconService
         _options = options.Value;
     }
 
+    public string? GetConfigurationError() => ValidateOptions();
+
     public async Task<ServerRconResult> GetStatusAsync(CancellationToken cancellationToken)
+    {
+        var result = await TryExecuteAsync("status", cancellationToken);
+
+        if (!result.IsSuccess)
+        {
+            return result;
+        }
+
+        return new ServerRconResult(true, TruncateForTelegram(result.Message));
+    }
+
+    public Task<ServerRconResult> TryExecuteAsync(
+        string command,
+        CancellationToken cancellationToken = default) =>
+        ExecuteAsync(command, cancellationToken);
+
+    public async Task<bool> IsOnlineAsync(CancellationToken cancellationToken)
+    {
+        var result = await TryExecuteAsync("status", cancellationToken);
+        return result.IsSuccess;
+    }
+
+    private async Task<ServerRconResult> ExecuteAsync(
+        string command,
+        CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
 
@@ -36,15 +63,11 @@ public sealed class ServerRconService
 
         try
         {
-            rcon = new RCON(
-                IPAddress.Parse(_options.Host.Trim()),
-                (ushort)_options.Port,
-                _options.Password);
-
+            rcon = CreateClient();
             await rcon.ConnectAsync();
 
-            var response = await rcon.SendCommandAsync("status");
-            return new ServerRconResult(true, TruncateForTelegram(response));
+            var response = await rcon.SendCommandAsync(command);
+            return new ServerRconResult(true, response);
         }
         catch (Exception ex)
         {
@@ -52,9 +75,32 @@ public sealed class ServerRconService
         }
         finally
         {
-            rcon?.Dispose();
+            SafeDispose(rcon);
         }
     }
+
+    private static void SafeDispose(RCON? rcon)
+    {
+        if (rcon is null)
+        {
+            return;
+        }
+
+        try
+        {
+            rcon.Dispose();
+        }
+        catch (Exception)
+        {
+            // Failed connections may throw during socket shutdown; cleanup errors must not mask RCON results.
+        }
+    }
+
+    private RCON CreateClient() =>
+        new(
+            IPAddress.Parse(_options.Host.Trim()),
+            (ushort)_options.Port,
+            _options.Password);
 
     private string? ValidateOptions()
     {

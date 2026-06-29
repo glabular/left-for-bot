@@ -11,6 +11,7 @@ public static class RconServiceCollectionExtensions
     {
         services.Configure<RconOptions>(configuration.GetSection(RconOptions.SectionName));
         services.AddSingleton<ServerRconService>();
+        services.AddSingleton<ServerRestartService>();
 
         return services;
     }
