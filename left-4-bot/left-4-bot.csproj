@@ -10,6 +10,7 @@
   </PropertyGroup>
 
 	<ItemGroup>
+		<PackageReference Include="CoreRCON" Version="5.*" />
 		<PackageReference Include="FluentFTP" Version="53.*" />
 		<PackageReference Include="L4D2PlayStats" Version="1.0.0.58" />
 		<PackageReference Include="Telegram.Bot" Version="22.*" />

@@ -1,5 +1,6 @@
 ﻿using System.Globalization;
 using left_4_bot.L4D2;
+using left_4_bot.Rcon;
 using left_4_bot.ServerLogs;
 using Telegram.Bot;
 using Telegram.Bot.Types;
@@ -22,6 +23,7 @@ public sealed class GroupCommandHandler
 
         /stat [дд.мм.гггг] — статистика за день (без даты — текущий)
 
+        /status — статус игрового сервера (онлайн, карта, игроки)
         /server — как прописать сервер в игре
         /help — справка
         """;
@@ -46,15 +48,18 @@ public sealed class GroupCommandHandler
     private readonly GoldenPoolService _goldenPool;
     private readonly GoldenPoolEditLimiter _editLimiter;
     private readonly PlayStatsService _playStats;
+    private readonly ServerRconService _serverRcon;
 
     public GroupCommandHandler(
         GoldenPoolService goldenPool,
         GoldenPoolEditLimiter editLimiter,
-        PlayStatsService playStats)
+        PlayStatsService playStats,
+        ServerRconService serverRcon)
     {
         _goldenPool = goldenPool;
         _editLimiter = editLimiter;
         _playStats = playStats;
+        _serverRcon = serverRcon;
     }
 
     public async Task HandleAsync(
@@ -92,6 +97,10 @@ public sealed class GroupCommandHandler
 
             case "stat":
                 await HandleStatAsync(bot, message, args, cancellationToken);
+                break;
+
+            case "status":
+                await HandleStatusAsync(bot, message, cancellationToken);
                 break;
 
             case "server":
@@ -288,6 +297,36 @@ public sealed class GroupCommandHandler
             message.Chat.Id,
             result.Messages,
             cancellationToken);
+    }
+
+    private async Task HandleStatusAsync(
+        ITelegramBotClient bot,
+        Message message,
+        CancellationToken cancellationToken)
+    {
+        await bot.SendMessage(
+            message.Chat.Id,
+            "Получаю статус сервера…",
+            cancellationToken: cancellationToken);
+
+        var result = await _serverRcon.GetStatusAsync(cancellationToken);
+
+        if (!result.IsSuccess)
+        {
+            await bot.SendMessage(
+                message.Chat.Id,
+                result.Message,
+                cancellationToken: cancellationToken);
+            return;
+        }
+
+        var text = $"<pre>{StatReportFormatting.EscapeHtml(result.Message)}</pre>";
+
+        await bot.SendMessage(
+            message.Chat.Id,
+            text,
+            parseMode: ParseMode.Html,
+            cancellationToken: cancellationToken);
     }
 
     private static async Task HandleHelpAsync(

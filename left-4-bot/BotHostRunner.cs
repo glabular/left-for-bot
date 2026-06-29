@@ -1,5 +1,6 @@
 ﻿using left_4_bot.Handlers;
 using left_4_bot.L4D2;
+using left_4_bot.Rcon;
 using left_4_bot.ServerLogs;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -20,6 +21,7 @@ public static class BotHostRunner
         builder.Services.AddSingleton<GoldenPoolService>();
         builder.Services.AddSingleton<GoldenPoolEditLimiter>();
         builder.Services.AddServerLogSync(builder.Configuration);
+        builder.Services.AddRcon(builder.Configuration);
         builder.Services.AddSingleton(settings);
         builder.Services.AddSingleton<TelegramConnectionMonitor>();
         builder.Services.AddSingleton<ITelegramBotClient>(_ => new TelegramBotClient(settings.Token));
