@@ -5,7 +5,8 @@ public static class PlayStatsReportBuilder
     public static IReadOnlyList<PlayStatsOutboundMessage> BuildCategoryMessages(
         IReadOnlyDictionary<string, PlayerDayStats> players,
         IReadOnlySet<string> prioritySteamIds,
-        bool includeFriendlyFireInEmpty)
+        bool includeFriendlyFireInEmpty,
+        bool includeProtectTeammateInEmpty)
     {
         var withData = new List<PlayStatsCategory>();
         var withoutData = new List<PlayStatsCategory>();
@@ -34,7 +35,9 @@ public static class PlayStatsReportBuilder
             });
         }
 
-        if (!includeFriendlyFireInEmpty && withoutData.Count == 0)
+        if (!includeFriendlyFireInEmpty
+            && !includeProtectTeammateInEmpty
+            && withoutData.Count == 0)
         {
             return messages;
         }
@@ -47,7 +50,10 @@ public static class PlayStatsReportBuilder
 
         messages.Add(new PlayStatsOutboundMessage
         {
-            Text = PlayStatsReportFormatter.FormatEmptyCategories(withoutData, includeFriendlyFireInEmpty),
+            Text = PlayStatsReportFormatter.FormatEmptyCategories(
+                withoutData,
+                includeFriendlyFireInEmpty,
+                includeProtectTeammateInEmpty),
             DisableNotification = true,
         });
 

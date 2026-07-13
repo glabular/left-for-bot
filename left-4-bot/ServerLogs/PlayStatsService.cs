@@ -6,17 +6,20 @@ public sealed class PlayStatsService
 {
     private readonly ServerLogSyncService _logSync;
     private readonly FriendlyFireStatsService _friendlyFireStats;
+    private readonly ProtectTeammateStatsService _protectTeammateStats;
     private readonly GamingDayOptions _gamingDayOptions;
     private readonly HashSet<string> _prioritySteamIds;
 
     public PlayStatsService(
         ServerLogSyncService logSync,
         FriendlyFireStatsService friendlyFireStats,
+        ProtectTeammateStatsService protectTeammateStats,
         IOptions<GamingDayOptions> gamingDayOptions,
         IOptions<PriorityPlayersOptions> priorityOptions)
     {
         _logSync = logSync;
         _friendlyFireStats = friendlyFireStats;
+        _protectTeammateStats = protectTeammateStats;
         _gamingDayOptions = gamingDayOptions.Value;
         _prioritySteamIds = new HashSet<string>(
             priorityOptions.Value.SteamIds,
@@ -37,10 +40,15 @@ public sealed class PlayStatsService
             gamingDayAnchor,
             _prioritySteamIds,
             cancellationToken);
+        var protectTeammate = await _protectTeammateStats.GetSectionDataAsync(
+            gamingDayAnchor,
+            _prioritySteamIds,
+            cancellationToken);
         var playStatsDownload = await _logSync.DownloadPlayStatsFilesAsync(calendarDates, cancellationToken);
 
         if (!playStatsDownload.IsSuccess
-            && friendlyFire.State == FriendlyFireSectionState.DownloadFailed)
+            && friendlyFire.State == FriendlyFireSectionState.DownloadFailed
+            && protectTeammate.State == ProtectTeammateSectionState.DownloadFailed)
         {
             return PlayStatsReportBuilder.BuildError(
                 FormatError(MapDownloadError(playStatsDownload.Message)));
@@ -55,6 +63,7 @@ public sealed class PlayStatsService
         }
 
         var priorityPlayerPresent = friendlyFire.PriorityPlayerPresent
+            || protectTeammate.PriorityPlayerPresent
             || (players?.Keys.Any(_prioritySteamIds.Contains) ?? false);
 
         if (!priorityPlayerPresent)
@@ -71,15 +80,20 @@ public sealed class PlayStatsService
         };
 
         messages.AddRange(FriendlyFireReportBuilder.BuildMessages(friendlyFire, _prioritySteamIds));
+        messages.AddRange(ProtectTeammateReportBuilder.BuildMessages(protectTeammate, _prioritySteamIds));
 
         var includeFriendlyFireInEmpty = friendlyFire.State
             is FriendlyFireSectionState.NoLogs
             or FriendlyFireSectionState.DownloadFailed;
+        var includeProtectTeammateInEmpty = protectTeammate.State
+            is ProtectTeammateSectionState.NoLogs
+            or ProtectTeammateSectionState.DownloadFailed;
 
         messages.AddRange(PlayStatsReportBuilder.BuildCategoryMessages(
             players ?? new Dictionary<string, PlayerDayStats>(StringComparer.Ordinal),
             _prioritySteamIds,
-            includeFriendlyFireInEmpty));
+            includeFriendlyFireInEmpty,
+            includeProtectTeammateInEmpty));
 
         return PlayStatsResult.Succeeded(messages);
     }

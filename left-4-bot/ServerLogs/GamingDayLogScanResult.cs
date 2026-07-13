@@ -6,4 +6,7 @@ public sealed class GamingDayLogScanResult
 
     public Dictionary<string, FriendlyFireAttackerStats> Attackers { get; } =
         new(StringComparer.Ordinal);
+
+    public Dictionary<string, ProtectTeammatePlayerStats> ProtectTeammatePlayers { get; } =
+        new(StringComparer.Ordinal);
 }

@@ -14,6 +14,11 @@ public static partial class GamingDayLogParser
         RegexOptions.Compiled)]
     private static partial Regex FriendlyFireLineRegex();
 
+    [GeneratedRegex(
+        @"^L .+?""(?<player>[^""]+)"" triggered ""protect_teammate""",
+        RegexOptions.Compiled)]
+    private static partial Regex ProtectTeammateLineRegex();
+
     public static GamingDayLogScanResult ScanFiles(
         IEnumerable<string> filePaths,
         GamingDayBounds bounds,
@@ -51,6 +56,7 @@ public static partial class GamingDayLogParser
 
         TryScanPlayerActivity(line, prioritySteamIds, result);
         TryScanFriendlyFire(line, prioritySteamIds, result);
+        TryScanProtectTeammate(line, prioritySteamIds, result);
     }
 
     private static void TryScanPlayerActivity(
@@ -133,5 +139,48 @@ public static partial class GamingDayLogParser
         }
 
         victimStats.HitCount++;
+    }
+
+    private static void TryScanProtectTeammate(
+        string line,
+        IReadOnlySet<string> prioritySteamIds,
+        GamingDayLogScanResult result)
+    {
+        var match = ProtectTeammateLineRegex().Match(line);
+        if (!match.Success)
+        {
+            return;
+        }
+
+        if (!ServerLogLineParser.TryParsePlayerToken(match.Groups["player"].Value, out var player))
+        {
+            return;
+        }
+
+        if (!string.Equals(player.Team, "Survivor", StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        if (prioritySteamIds.Contains(player.SteamId))
+        {
+            result.PriorityPlayerPresent = true;
+        }
+
+        if (!result.ProtectTeammatePlayers.TryGetValue(player.SteamId, out var playerStats))
+        {
+            playerStats = new ProtectTeammatePlayerStats
+            {
+                SteamId = player.SteamId,
+                Name = player.Name,
+            };
+            result.ProtectTeammatePlayers[player.SteamId] = playerStats;
+        }
+        else
+        {
+            playerStats.Name = player.Name;
+        }
+
+        playerStats.Count++;
     }
 }

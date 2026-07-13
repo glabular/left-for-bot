@@ -54,7 +54,8 @@ public static class PlayStatsReportFormatter
 
     public static string FormatEmptyCategories(
         IReadOnlyList<PlayStatsCategory> categories,
-        bool includeFriendlyFire)
+        bool includeFriendlyFire,
+        bool includeProtectTeammate)
     {
         var builder = new StringBuilder();
         var wroteAny = false;
@@ -62,6 +63,18 @@ public static class PlayStatsReportFormatter
         if (includeFriendlyFire)
         {
             builder.AppendLine(StatReportFormatting.FriendlyFireCategoryTitle);
+            builder.AppendLine();
+            wroteAny = true;
+        }
+
+        if (includeProtectTeammate)
+        {
+            if (wroteAny)
+            {
+                builder.AppendLine();
+            }
+
+            builder.AppendLine(StatReportFormatting.GetProtectTeammateCategoryTitle());
             builder.AppendLine();
             wroteAny = true;
         }
