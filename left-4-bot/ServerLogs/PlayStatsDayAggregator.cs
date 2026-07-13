@@ -41,6 +41,7 @@ public static class PlayStatsDayAggregator
                     aggregate.WitchDamage += player.WitchDamage;
                     aggregate.TankDamage += player.TankDamage;
                     aggregate.RockSkeets += player.RockSkeets;
+                    aggregate.Clears += player.Clears;
                     aggregate.MeleesOnTank += player.MeleesOnTank;
 
                     if (!string.IsNullOrEmpty(player.PlayerName))

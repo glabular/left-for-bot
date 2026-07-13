@@ -55,43 +55,34 @@ public static class PlayStatsReportFormatter
     public static string FormatEmptyCategories(
         IReadOnlyList<PlayStatsCategory> categories,
         bool includeFriendlyFire,
-        bool includeProtectTeammate)
+        bool includeProtectTeammate,
+        bool includeClears)
     {
-        var builder = new StringBuilder();
-        var wroteAny = false;
+        var titles = new List<string>();
 
         if (includeFriendlyFire)
         {
-            builder.AppendLine(StatReportFormatting.FriendlyFireCategoryTitle);
-            builder.AppendLine();
-            wroteAny = true;
+            titles.Add(StatReportFormatting.FriendlyFireCategoryTitle);
         }
 
         if (includeProtectTeammate)
         {
-            if (wroteAny)
-            {
-                builder.AppendLine();
-            }
-
-            builder.AppendLine(StatReportFormatting.GetProtectTeammateCategoryTitle());
-            builder.AppendLine();
-            wroteAny = true;
+            titles.Add(StatReportFormatting.GetProtectTeammateCategoryTitle());
         }
 
-        for (var i = 0; i < categories.Count; i++)
+        if (includeClears)
         {
-            if (wroteAny)
-            {
-                builder.AppendLine();
-            }
-
-            builder.AppendLine(categories[i].Title);
-            builder.AppendLine();
-            wroteAny = true;
+            titles.Add(PlayStatsCategories.Clears.Title);
         }
 
-        return builder.ToString().TrimEnd();
+        foreach (var category in categories)
+        {
+            titles.Add(category.Title);
+        }
+
+        return string.Join(
+            Environment.NewLine,
+            titles.Select(title => $"· {title}"));
     }
 
     public static string FormatNoPriorityPlay(DateOnly gamingDayAnchor) =>

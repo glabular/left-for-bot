@@ -24,5 +24,7 @@ public sealed class PlayerDayStats
 
     public int RockSkeets { get; set; }
 
+    public int Clears { get; set; }
+
     public int MeleesOnTank { get; set; }
 }

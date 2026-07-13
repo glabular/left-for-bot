@@ -82,18 +82,30 @@ public sealed class PlayStatsService
         messages.AddRange(FriendlyFireReportBuilder.BuildMessages(friendlyFire, _prioritySteamIds));
         messages.AddRange(ProtectTeammateReportBuilder.BuildMessages(protectTeammate, _prioritySteamIds));
 
+        var playersForReport = players ?? new Dictionary<string, PlayerDayStats>(StringComparer.Ordinal);
+        var clearsMessage = PlayStatsReportBuilder.BuildCategoryMessageIfHasData(
+            PlayStatsCategories.Clears,
+            playersForReport,
+            _prioritySteamIds);
+        if (clearsMessage is not null)
+        {
+            messages.Add(clearsMessage);
+        }
+
         var includeFriendlyFireInEmpty = friendlyFire.State
             is FriendlyFireSectionState.NoLogs
             or FriendlyFireSectionState.DownloadFailed;
         var includeProtectTeammateInEmpty = protectTeammate.State
             is ProtectTeammateSectionState.NoLogs
             or ProtectTeammateSectionState.DownloadFailed;
+        var includeClearsInEmpty = clearsMessage is null;
 
-        messages.AddRange(PlayStatsReportBuilder.BuildCategoryMessages(
-            players ?? new Dictionary<string, PlayerDayStats>(StringComparer.Ordinal),
+        messages.AddRange(PlayStatsReportBuilder.BuildMainCategoryMessages(
+            playersForReport,
             _prioritySteamIds,
             includeFriendlyFireInEmpty,
-            includeProtectTeammateInEmpty));
+            includeProtectTeammateInEmpty,
+            includeClearsInEmpty));
 
         return PlayStatsResult.Succeeded(messages);
     }

@@ -2,7 +2,10 @@ namespace left_4_bot.ServerLogs;
 
 public static class PlayStatsCategories
 {
-    public static IReadOnlyList<PlayStatsCategory> All { get; } =
+    public static PlayStatsCategory Clears { get; } =
+        new("Освобождено союзников", player => player.Clears);
+
+    public static IReadOnlyList<PlayStatsCategory> Main { get; } =
     [
         new("Убито обычных заражённых", player => player.Common),
         new("Убито особых заражённых", player => player.SiKilled),

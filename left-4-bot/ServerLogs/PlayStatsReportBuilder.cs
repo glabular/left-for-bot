@@ -2,16 +2,35 @@ namespace left_4_bot.ServerLogs;
 
 public static class PlayStatsReportBuilder
 {
-    public static IReadOnlyList<PlayStatsOutboundMessage> BuildCategoryMessages(
+    public static PlayStatsOutboundMessage? BuildCategoryMessageIfHasData(
+        PlayStatsCategory category,
+        IReadOnlyDictionary<string, PlayerDayStats> players,
+        IReadOnlySet<string> prioritySteamIds)
+    {
+        if (!PlayStatsReportFormatter.CategoryHasData(category, players, prioritySteamIds))
+        {
+            return null;
+        }
+
+        return new PlayStatsOutboundMessage
+        {
+            Text = PlayStatsReportFormatter.FormatCategory(category, players, prioritySteamIds),
+            UseHtml = true,
+            DisableNotification = true,
+        };
+    }
+
+    public static IReadOnlyList<PlayStatsOutboundMessage> BuildMainCategoryMessages(
         IReadOnlyDictionary<string, PlayerDayStats> players,
         IReadOnlySet<string> prioritySteamIds,
         bool includeFriendlyFireInEmpty,
-        bool includeProtectTeammateInEmpty)
+        bool includeProtectTeammateInEmpty,
+        bool includeClearsInEmpty)
     {
         var withData = new List<PlayStatsCategory>();
         var withoutData = new List<PlayStatsCategory>();
 
-        foreach (var category in PlayStatsCategories.All)
+        foreach (var category in PlayStatsCategories.Main)
         {
             if (PlayStatsReportFormatter.CategoryHasData(category, players, prioritySteamIds))
             {
@@ -37,6 +56,7 @@ public static class PlayStatsReportBuilder
 
         if (!includeFriendlyFireInEmpty
             && !includeProtectTeammateInEmpty
+            && !includeClearsInEmpty
             && withoutData.Count == 0)
         {
             return messages;
@@ -53,7 +73,8 @@ public static class PlayStatsReportBuilder
             Text = PlayStatsReportFormatter.FormatEmptyCategories(
                 withoutData,
                 includeFriendlyFireInEmpty,
-                includeProtectTeammateInEmpty),
+                includeProtectTeammateInEmpty,
+                includeClearsInEmpty),
             DisableNotification = true,
         });
 
