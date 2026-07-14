@@ -1,4 +1,5 @@
-﻿using left_4_bot.Handlers;
+﻿using left_4_bot.Call;
+using left_4_bot.Handlers;
 using left_4_bot.L4D2;
 using left_4_bot.Rcon;
 using left_4_bot.ServerLogs;
@@ -20,6 +21,9 @@ public static class BotHostRunner
             builder.Configuration.GetSection("GoldenPool"));
         builder.Services.AddSingleton<GoldenPoolService>();
         builder.Services.AddSingleton<GoldenPoolEditLimiter>();
+        builder.Services.Configure<CallListOptions>(
+            builder.Configuration.GetSection(CallListOptions.SectionName));
+        builder.Services.AddSingleton<CallListService>();
         builder.Services.AddServerLogSync(builder.Configuration);
         builder.Services.AddRcon(builder.Configuration);
         builder.Services.AddSingleton(settings);

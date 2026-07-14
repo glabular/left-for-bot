@@ -1,4 +1,5 @@
 ﻿using System.Globalization;
+using left_4_bot.Call;
 using left_4_bot.L4D2;
 using left_4_bot.Rcon;
 using left_4_bot.ServerLogs;
@@ -20,6 +21,11 @@ public sealed class GroupCommandHandler
         /addmap <англ.> — добавить в любимые
         /removemap <англ.> — удалить из любимых        
         Названия кампаний — на английском (например: Dark Carnival)
+
+        /call — созвать игроков из списка
+        /call @ник — добавить или удалить ник из списка
+        /call "фраза" — добавить или удалить фразу созыва
+        Ответьте /call на сообщение человека — добавить/удалить без ника
 
         /stat [дд.мм.гггг] — статистика за день (без даты — текущий)
 
@@ -47,6 +53,40 @@ public sealed class GroupCommandHandler
     private const string EmptyPoolText =
         "Золотой пул пуст.\n\nИспользуйте /addmap <название на английском>\n\nНапример:\n    /addmap Dark Carnival";
 
+    private const string EmptyCallListText =
+        """
+        Список пуст.
+
+        Добавить с ником:
+            /call @ник
+        Без ника — ответьте /call на сообщение человека
+        """;
+
+    private const string EmptyCallPhrasesText =
+        """
+        Нет фраз для созыва.
+
+        Добавьте фразу:
+            /call "Го играть!"
+        """;
+
+    private const string CallUsageText =
+        """
+        Использование:
+            /call — созвать список
+            /call @ник — добавить или удалить ник
+            /call "фраза" — добавить или удалить фразу
+            ответьте /call на сообщение — добавить/удалить без ника
+        """;
+
+    private const string CallPhraseUsageText =
+        """
+        Фраза должна быть в двойных кавычках.
+
+        Например:
+            /call "Го играть!"
+        """;
+
     private const string RestartInstructionText =
         """
         Во избежание случайной перезагрузки команде требуется параметр подтвержения.
@@ -61,6 +101,7 @@ public sealed class GroupCommandHandler
 
     private readonly GoldenPoolService _goldenPool;
     private readonly GoldenPoolEditLimiter _editLimiter;
+    private readonly CallListService _callList;
     private readonly PlayStatsService _playStats;
     private readonly ServerRconService _serverRcon;
     private readonly ServerRestartService _restartService;
@@ -68,12 +109,14 @@ public sealed class GroupCommandHandler
     public GroupCommandHandler(
         GoldenPoolService goldenPool,
         GoldenPoolEditLimiter editLimiter,
+        CallListService callList,
         PlayStatsService playStats,
         ServerRconService serverRcon,
         ServerRestartService restartService)
     {
         _goldenPool = goldenPool;
         _editLimiter = editLimiter;
+        _callList = callList;
         _playStats = playStats;
         _serverRcon = serverRcon;
         _restartService = restartService;
@@ -108,6 +151,10 @@ public sealed class GroupCommandHandler
                 await HandleFavMapsAsync(bot, message, cancellationToken);
                 break;
 
+            case "call":
+                await HandleCallAsync(bot, message, args, cancellationToken);
+                break;
+
             case "help":
                 await HandleHelpAsync(bot, message, cancellationToken);
                 break;
@@ -131,6 +178,161 @@ public sealed class GroupCommandHandler
             default:
                 break;
         }
+    }
+
+    private async Task HandleCallAsync(
+        ITelegramBotClient bot,
+        Message message,
+        string args,
+        CancellationToken cancellationToken)
+    {
+        var repliedUser = message.ReplyToMessage?.From;
+
+        if (string.IsNullOrWhiteSpace(args))
+        {
+            if (repliedUser is not null && !repliedUser.IsBot)
+            {
+                await ToggleFromReplyAsync(bot, message, repliedUser, cancellationToken);
+                return;
+            }
+
+            var phrase = _callList.PickPhrase();
+            if (phrase is null)
+            {
+                await bot.SendMessage(
+                    message.Chat.Id,
+                    EmptyCallPhrasesText,
+                    cancellationToken: cancellationToken);
+                return;
+            }
+
+            var entries = _callList.GetEntries();
+            if (entries.Count == 0)
+            {
+                await bot.SendMessage(
+                    message.Chat.Id,
+                    EmptyCallListText,
+                    cancellationToken: cancellationToken);
+                return;
+            }
+
+            var mentions = string.Join(' ', entries.Select(FormatMentionHtml));
+            var text = $"{StatReportFormatting.EscapeHtml(phrase)}\n\n{mentions}";
+            await bot.SendMessage(
+                message.Chat.Id,
+                text,
+                parseMode: ParseMode.Html,
+                cancellationToken: cancellationToken);
+            return;
+        }
+
+        if (CallListService.TryParseQuotedPhrase(args, out var phraseText, out var looksLikeQuoted))
+        {
+            var phraseResult = _callList.TryTogglePhrase(phraseText, out var phraseLabel);
+            var phraseReply = phraseResult switch
+            {
+                CallToggleResult.Added => $"Добавлена фраза: {phraseLabel}",
+                CallToggleResult.Removed => $"Удалена фраза: {phraseLabel}",
+                CallToggleResult.Invalid => CallPhraseUsageText,
+                CallToggleResult.SaveFailed => "Не удалось сохранить список в appsettings.json.",
+                _ => "Не удалось изменить список фраз.",
+            };
+
+            await bot.SendMessage(message.Chat.Id, phraseReply, cancellationToken: cancellationToken);
+            return;
+        }
+
+        if (looksLikeQuoted)
+        {
+            await bot.SendMessage(
+                message.Chat.Id,
+                CallPhraseUsageText,
+                cancellationToken: cancellationToken);
+            return;
+        }
+
+        // Args without reply: toggle by @username only.
+        var nickArg = args.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)[0];
+        if (!CallListService.TryNormalize(nickArg, out var username))
+        {
+            await bot.SendMessage(
+                message.Chat.Id,
+                "Некорректный ник. Telegram username: 5–32 символов (латиница, цифры, _).\n\n" + CallUsageText,
+                cancellationToken: cancellationToken);
+            return;
+        }
+
+        var result = _callList.TryToggleUsername(username);
+        var textResult = result switch
+        {
+            CallToggleResult.Added => $"Добавлен: @{username}",
+            CallToggleResult.Removed => $"Удалён: @{username}",
+            CallToggleResult.Invalid =>
+                "Некорректный ник. Telegram username: 5–32 символов (латиница, цифры, _).\n\n" + CallUsageText,
+            CallToggleResult.SaveFailed => "Не удалось сохранить список в appsettings.json.",
+            _ => "Не удалось изменить список.",
+        };
+
+        await bot.SendMessage(message.Chat.Id, textResult, cancellationToken: cancellationToken);
+    }
+
+    private async Task ToggleFromReplyAsync(
+        ITelegramBotClient bot,
+        Message message,
+        User repliedUser,
+        CancellationToken cancellationToken)
+    {
+        // Prefer username toggle when the replied user has one — avoid id+nick duplicates.
+        if (!string.IsNullOrWhiteSpace(repliedUser.Username))
+        {
+            var result = _callList.TryToggleUsername(repliedUser.Username);
+            var text = result switch
+            {
+                CallToggleResult.Added => $"Добавлен: @{repliedUser.Username}",
+                CallToggleResult.Removed => $"Удалён: @{repliedUser.Username}",
+                CallToggleResult.SaveFailed => "Не удалось сохранить список в appsettings.json.",
+                _ => "Не удалось изменить список.",
+            };
+
+            await bot.SendMessage(message.Chat.Id, text, cancellationToken: cancellationToken);
+            return;
+        }
+
+        var displayName = FormatTelegramDisplayName(repliedUser);
+        var userResult = _callList.TryToggleUser(repliedUser.Id, displayName, out var label);
+        var userText = userResult switch
+        {
+            CallToggleResult.Added => $"Добавлен: {label}",
+            CallToggleResult.Removed => $"Удалён: {label}",
+            CallToggleResult.Invalid => "Не удалось определить имя пользователя Telegram.",
+            CallToggleResult.SaveFailed => "Не удалось сохранить список в appsettings.json.",
+            _ => "Не удалось изменить список.",
+        };
+
+        await bot.SendMessage(message.Chat.Id, userText, cancellationToken: cancellationToken);
+    }
+
+    private static string FormatTelegramDisplayName(User user)
+    {
+        if (string.IsNullOrWhiteSpace(user.LastName))
+        {
+            return user.FirstName;
+        }
+
+        return $"{user.FirstName} {user.LastName}";
+    }
+
+    private static string FormatMentionHtml(CallListEntry entry)
+    {
+        if (!string.IsNullOrEmpty(entry.Username))
+        {
+            return "@" + entry.Username;
+        }
+
+        var id = entry.UserId
+            ?? throw new InvalidOperationException("Call list entry has neither username nor user id.");
+        var name = StatReportFormatting.EscapeHtml(entry.DisplayLabel);
+        return $"<a href=\"tg://user?id={id}\">{name}</a>";
     }
 
     private async Task HandleGoldenMapAsync(
