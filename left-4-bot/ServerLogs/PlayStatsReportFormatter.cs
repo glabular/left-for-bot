@@ -26,6 +26,12 @@ public static class PlayStatsReportFormatter
         var builder = new StringBuilder();
 
         builder.AppendLine(StatReportFormatting.FormatCategoryTitle(category.Title));
+
+        if (!string.IsNullOrEmpty(category.Warning))
+        {
+            builder.AppendLine(category.Warning);
+        }
+
         builder.AppendLine();
 
         var ranked = StatReportFormatting.RankAllEntries(

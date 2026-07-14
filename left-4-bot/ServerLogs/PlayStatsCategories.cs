@@ -12,7 +12,10 @@ public static class PlayStatsCategories
         new("Выстрелов в голову", player => player.Headshots),
         new("Урон по ведьме", player => player.WitchDamage),
         new("Урон по танку", player => player.TankDamage),
-        new("Сбито камней", player => player.RockSkeets),
+        new(
+            "Сбито камней",
+            player => player.RockSkeets,
+            "(Данные могут быть неточными из-за особенностей плагина.)"),
         new("Ударов рукопашкой по танку", player => player.MeleesOnTank),
     ];
 }
