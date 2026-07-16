@@ -4,15 +4,17 @@ namespace left_4_bot.ServerLogs;
 
 public static class PlayStatsDayAggregator
 {
-    public static Dictionary<string, PlayerDayStats> ParseFiles(IReadOnlyList<string> filePaths)
+    public static PlayStatsParseResult ParseFiles(IReadOnlyList<string> filePaths)
     {
         var totals = new Dictionary<string, PlayerDayStats>(StringComparer.Ordinal);
+        var failedPaths = new List<string>();
 
         foreach (var path in filePaths)
         {
             if (!Statistics.TryParse(File.ReadAllText(path), out var stats)
                 || stats?.GameRound is null)
             {
+                failedPaths.Add(path);
                 continue;
             }
 
@@ -52,6 +54,10 @@ public static class PlayStatsDayAggregator
             }
         }
 
-        return totals;
+        return new PlayStatsParseResult
+        {
+            Players = totals,
+            FailedPaths = failedPaths,
+        };
     }
 }

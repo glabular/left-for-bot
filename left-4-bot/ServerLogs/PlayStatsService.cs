@@ -4,6 +4,8 @@ namespace left_4_bot.ServerLogs;
 
 public sealed class PlayStatsService
 {
+    private static readonly TimeSpan PlayStatsParseRetryDelay = TimeSpan.FromSeconds(3);
+
     private readonly ServerLogSyncService _logSync;
     private readonly FriendlyFireStatsService _friendlyFireStats;
     private readonly ProtectTeammateStatsService _protectTeammateStats;
@@ -57,7 +59,31 @@ public sealed class PlayStatsService
 
         if (playStatsAvailable)
         {
-            players = PlayStatsDayAggregator.ParseFiles(playStatsDownload.LocalFilePaths);
+            var parse = PlayStatsDayAggregator.ParseFiles(playStatsDownload.LocalFilePaths);
+
+            if (parse.FailedPaths.Count > 0)
+            {
+                await Task.Delay(PlayStatsParseRetryDelay, cancellationToken);
+
+                foreach (var failedPath in parse.FailedPaths)
+                {
+                    if (File.Exists(failedPath))
+                    {
+                        File.Delete(failedPath);
+                    }
+                }
+
+                playStatsDownload = await _logSync.DownloadPlayStatsFilesAsync(
+                    calendarDates,
+                    cancellationToken);
+
+                if (playStatsDownload.IsSuccess && playStatsDownload.LocalFilePaths.Count > 0)
+                {
+                    parse = PlayStatsDayAggregator.ParseFiles(playStatsDownload.LocalFilePaths);
+                }
+            }
+
+            players = parse.Players;
         }
 
         var priorityPlayerPresent = friendlyFire.PriorityPlayerPresent
