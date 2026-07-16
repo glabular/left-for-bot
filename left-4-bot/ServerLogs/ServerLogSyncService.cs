@@ -127,11 +127,11 @@ public sealed class ServerLogSyncService
 
         try
         {
-            await _ftpClient.ConnectAsync(cancellationToken);
+            await using var session = await _ftpClient.BeginSessionAsync(cancellationToken);
 
             _logger.LogDebug("Listing remote directory {RemoteDirectory}", remoteDirectory);
 
-            var remoteFiles = await _ftpClient.ListFilesAsync(
+            var remoteFiles = await session.ListFilesAsync(
                 remoteDirectory,
                 cancellationToken);
 
@@ -174,6 +174,7 @@ public sealed class ServerLogSyncService
                     : FtpLocalExists.Overwrite;
 
                 await DownloadFileWithRetryAsync(
+                    session,
                     file.FullPath,
                     localPath,
                     existsMode,
@@ -195,10 +196,6 @@ public sealed class ServerLogSyncService
             return TodayLogDownloadResult.Failed(
                 $"Не удалось скачать логи с сервера: {ex.Message}");
         }
-        finally
-        {
-            await _ftpClient.DisconnectAsync(cancellationToken);
-        }
     }
 
     public async Task<ServerLogSyncResult> DownloadLatestLogAsync(CancellationToken cancellationToken)
@@ -217,6 +214,7 @@ public sealed class ServerLogSyncService
     }
 
     private async Task DownloadFileWithRetryAsync(
+        IFtpSession session,
         string remotePath,
         string localPath,
         FtpLocalExists existsMode,
@@ -226,7 +224,7 @@ public sealed class ServerLogSyncService
         {
             try
             {
-                await _ftpClient.DownloadFileAsync(
+                await session.DownloadFileAsync(
                     remotePath,
                     localPath,
                     existsMode,
@@ -243,8 +241,9 @@ public sealed class ServerLogSyncService
                     MaxDownloadAttempts,
                     remotePath);
 
+                // No manual reconnect here: the session holds one exclusive connection and
+                // FluentFTP re-establishes it on the next command (SelfConnectMode.OnConnectionLost).
                 await Task.Delay(RetryBaseDelay * attempt, cancellationToken);
-                await _ftpClient.ConnectAsync(cancellationToken);
             }
         }
     }

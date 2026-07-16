@@ -70,6 +70,21 @@ public sealed class WhoisLogWatcherHostedService : BackgroundService
 
     private async Task PollOnceAsync(CancellationToken cancellationToken)
     {
+        // When whois is off (or there is no group to notify), do not touch FTP at all.
+        // Reset offsets so that when it is re-enabled the first poll re-seeks to EOF and never
+        // replays historical log lines.
+        if (!_state.Enabled || _botSettings.GroupChatId == 0)
+        {
+            if (_offsets.Count > 0)
+            {
+                _offsets.Clear();
+            }
+
+            _missingApiKeyNotified = false;
+
+            return;
+        }
+
         var download = await _logSync.DownloadTodayLogFilesAsync(cancellationToken);
         if (!download.IsSuccess)
         {
@@ -100,14 +115,8 @@ public sealed class WhoisLogWatcherHostedService : BackgroundService
 
         PruneOffsets(download.LocalFilePaths);
 
-        if (enteredThisTick.Count == 0 || !_state.Enabled)
+        if (enteredThisTick.Count == 0)
         {
-            return;
-        }
-
-        if (_botSettings.GroupChatId == 0)
-        {
-            _logger.LogDebug("Whois skipped send: GroupChatId is 0");
             return;
         }
 

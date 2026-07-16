@@ -36,15 +36,13 @@ public sealed class PlayStatsService
         var bounds = GamingDay.GetBounds(gamingDayAnchor, _gamingDayOptions);
         var calendarDates = GamingDay.GetCalendarDatesToDownload(bounds);
 
-        var friendlyFire = await _friendlyFireStats.GetSectionDataAsync(
-            gamingDayAnchor,
-            _prioritySteamIds,
-            cancellationToken);
-        var protectTeammate = await _protectTeammateStats.GetSectionDataAsync(
-            gamingDayAnchor,
-            _prioritySteamIds,
-            cancellationToken);
+        // Download server logs once (shared by friendly-fire and protect-teammate sections),
+        // then playstats once. Previously each section opened its own FTP session, which caused
+        // three logins per /stat and races with the whois watcher over the shared connection.
+        var logDownload = await _logSync.DownloadLogFilesAsync(calendarDates, cancellationToken);
         var playStatsDownload = await _logSync.DownloadPlayStatsFilesAsync(calendarDates, cancellationToken);
+
+        var (friendlyFire, protectTeammate) = BuildLogSections(logDownload, bounds);
 
         if (!playStatsDownload.IsSuccess
             && friendlyFire.State == FriendlyFireSectionState.DownloadFailed
@@ -108,6 +106,34 @@ public sealed class PlayStatsService
             includeClearsInEmpty));
 
         return PlayStatsResult.Succeeded(messages);
+    }
+
+    private (FriendlyFireSectionData FriendlyFire, ProtectTeammateSectionData ProtectTeammate)
+        BuildLogSections(TodayLogDownloadResult logDownload, GamingDayBounds bounds)
+    {
+        if (!logDownload.IsSuccess)
+        {
+            return (
+                FriendlyFireSectionData.DownloadFailed(),
+                ProtectTeammateSectionData.DownloadFailed());
+        }
+
+        if (logDownload.LocalFilePaths.Count == 0)
+        {
+            return (
+                FriendlyFireSectionData.NoLogs(),
+                ProtectTeammateSectionData.NoLogs());
+        }
+
+        // Parse the downloaded logs a single time and derive both sections from the same scan.
+        var scan = GamingDayLogParser.ScanFiles(
+            logDownload.LocalFilePaths,
+            bounds,
+            _prioritySteamIds);
+
+        return (
+            _friendlyFireStats.BuildSection(scan),
+            _protectTeammateStats.BuildSection(scan));
     }
 
     private static string FormatError(string details) =>
