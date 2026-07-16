@@ -3,6 +3,7 @@ using left_4_bot.Call;
 using left_4_bot.L4D2;
 using left_4_bot.Rcon;
 using left_4_bot.ServerLogs;
+using left_4_bot.Whois;
 using Telegram.Bot;
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
@@ -14,26 +15,39 @@ public sealed class GroupCommandHandler
     private const string HelpText =
         """
         Команды:
-        /map — случайная карта из любимых
-        /randommap — случайная карта из всех
+        /map — случайная карта из любимых.
+        /randommap — случайная карта из всех.
 
-        /favmaps — список любимых карт
-        /addmap <англ.> — добавить в любимые
-        /removemap <англ.> — удалить из любимых        
-        Названия кампаний — на английском (например: Dark Carnival)
+        /favmaps — список любимых карт.
+        /addmap <англ.> — добавить в любимые.
+        /removemap <англ.> — удалить из любимых.       
+        Названия кампаний — на английском (например: Dark Carnival).
 
-        /call — созвать игроков из списка
-        /call @ник — добавить или удалить ник из списка
-        /call "фраза" — добавить или удалить фразу созыва
-        Ответьте /call на сообщение человека — добавить/удалить без ника
+        /call — созвать игроков из списка.
+        /call @ник — добавить или удалить ник из списка.
+        /call "фраза" — добавить или удалить фразу созыва.
+        Ответьте /call на сообщение человека — добавить/удалить если у него нет юзернейма.
 
-        /stat [дд.мм.гггг] — статистика за день (без даты — текущий)
+        /stat [дд.мм.гггг] — статистика за день (без даты — текущий).
 
-        /status — статус сервера
-        /restart да|yes — перезагрузить сервер
-        /server — как прописать сервер в игре
+        /status — статус сервера.
+        /restart да | /restart yes — перезагрузить сервер.
+        /server — как прописать сервер в игре.
 
-        /help — справка
+        /whois — включить или выключить автопроверку.
+        При включении бот сам пишет в чат, когда на сервер заходят новые игроки.
+        /whois now — проверить всех, кто сейчас на сервере.
+        /whois status — показать, включена ли сейчас автопроверка.
+
+        /help — эта справка.
+        """;
+
+    private const string WhoisUsageText =
+        """
+        Использование:
+            /whois — включить или выключить автопроверку
+            /whois now — проверить игроков, которые сейчас на сервере
+            /whois status — показать текущий статус автопроверки
         """;
 
     private const string ServerSetupText =
@@ -105,6 +119,9 @@ public sealed class GroupCommandHandler
     private readonly PlayStatsService _playStats;
     private readonly ServerRconService _serverRcon;
     private readonly ServerRestartService _restartService;
+    private readonly WhoisState _whoisState;
+    private readonly WhoisService _whoisService;
+    private readonly WhoisSessionTracker _whoisSessionTracker;
 
     public GroupCommandHandler(
         GoldenPoolService goldenPool,
@@ -112,7 +129,10 @@ public sealed class GroupCommandHandler
         CallListService callList,
         PlayStatsService playStats,
         ServerRconService serverRcon,
-        ServerRestartService restartService)
+        ServerRestartService restartService,
+        WhoisState whoisState,
+        WhoisService whoisService,
+        WhoisSessionTracker whoisSessionTracker)
     {
         _goldenPool = goldenPool;
         _editLimiter = editLimiter;
@@ -120,6 +140,9 @@ public sealed class GroupCommandHandler
         _playStats = playStats;
         _serverRcon = serverRcon;
         _restartService = restartService;
+        _whoisState = whoisState;
+        _whoisService = whoisService;
+        _whoisSessionTracker = whoisSessionTracker;
     }
 
     public async Task HandleAsync(
@@ -173,6 +196,10 @@ public sealed class GroupCommandHandler
 
             case "server":
                 await HandleServerSetupAsync(bot, message, cancellationToken);
+                break;
+
+            case "whois":
+                await HandleWhoisAsync(bot, message, args, cancellationToken);
                 break;
 
             default:
@@ -637,6 +664,112 @@ public sealed class GroupCommandHandler
             text,
             parseMode: ParseMode.Html,
             cancellationToken: cancellationToken);
+    }
+
+    private async Task HandleWhoisAsync(
+        ITelegramBotClient bot,
+        Message message,
+        string args,
+        CancellationToken cancellationToken)
+    {
+        var trimmed = args.Trim();
+
+        if (string.IsNullOrEmpty(trimmed))
+        {
+            if (!_whoisState.Enabled && !_whoisService.HasApiKey)
+            {
+                await bot.SendMessage(
+                    message.Chat.Id,
+                    WhoisService.MissingApiKeyMessage,
+                    cancellationToken: cancellationToken);
+                return;
+            }
+
+            var enabled = _whoisState.Toggle();
+            var feedback = enabled
+                ? "Проверка игроков включена.\nБот будет писать в группу при подключении новых игроков."
+                : "Проверка игроков выключена.";
+
+            await bot.SendMessage(
+                message.Chat.Id,
+                feedback,
+                cancellationToken: cancellationToken);
+            return;
+        }
+
+        if (trimmed.Equals("now", StringComparison.OrdinalIgnoreCase))
+        {
+            await HandleWhoisNowAsync(bot, message, cancellationToken);
+            return;
+        }
+
+        if (trimmed.Equals("status", StringComparison.OrdinalIgnoreCase))
+        {
+            var statusText = _whoisState.Enabled
+                ? "Статус: автопроверка заходов сейчас включена."
+                : "Статус: автопроверка заходов сейчас выключена.";
+
+            await bot.SendMessage(
+                message.Chat.Id,
+                statusText,
+                cancellationToken: cancellationToken);
+            return;
+        }
+
+        await bot.SendMessage(
+            message.Chat.Id,
+            WhoisUsageText,
+            cancellationToken: cancellationToken);
+    }
+
+    private async Task HandleWhoisNowAsync(
+        ITelegramBotClient bot,
+        Message message,
+        CancellationToken cancellationToken)
+    {
+        if (!_whoisService.HasApiKey)
+        {
+            await bot.SendMessage(
+                message.Chat.Id,
+                WhoisService.MissingApiKeyMessage,
+                cancellationToken: cancellationToken);
+            return;
+        }
+
+        var configError = _serverRcon.GetConfigurationError();
+        if (configError is not null)
+        {
+            await bot.SendMessage(
+                message.Chat.Id,
+                configError,
+                cancellationToken: cancellationToken);
+            return;
+        }
+
+        await bot.SendMessage(
+            message.Chat.Id,
+            "Проверяю игроков на сервере…",
+            cancellationToken: cancellationToken);
+
+        var result = await _serverRcon.TryExecuteAsync("status", cancellationToken);
+        if (!result.IsSuccess)
+        {
+            await bot.SendMessage(
+                message.Chat.Id,
+                result.Message,
+                cancellationToken: cancellationToken);
+            return;
+        }
+
+        var players = RconStatusPlayerParser.Parse(result.Message);
+        await _whoisService.ReportPlayersAsync(
+            bot,
+            message.Chat.Id,
+            players,
+            cancellationToken);
+
+        var announced = _whoisService.FilterNonPriority(players);
+        _whoisSessionTracker.MarkAnnounced(announced.Select(p => p.ClassicSteamId));
     }
 
     private static async Task HandleHelpAsync(

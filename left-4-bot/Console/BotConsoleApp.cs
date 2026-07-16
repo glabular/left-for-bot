@@ -69,12 +69,16 @@ public sealed class BotConsoleApp
         var settings = _store.Load();
 
         System.Console.WriteLine();
+        var steamWebApiKey = _store.LoadSteamWebApiKey();
+
         System.Console.WriteLine($"Token: {ConsolePrompts.MaskToken(settings.Token)}");
         System.Console.WriteLine($"Group chat ID: {settings.GroupChatId}");
+        System.Console.WriteLine($"Steam Web API key: {ConsolePrompts.MaskToken(steamWebApiKey)}");
         System.Console.WriteLine("1) Start bot");
         System.Console.WriteLine("2) Change bot token");
         System.Console.WriteLine("3) Set group chat ID (0 = discovery mode)");
         System.Console.WriteLine("4) Download latest server log");
+        System.Console.WriteLine("5) Set Steam Web API key");
         System.Console.WriteLine("0) Exit");
 
         return System.Console.ReadLine()?.Trim() switch
@@ -83,6 +87,7 @@ public sealed class BotConsoleApp
             "2" => SetTokenAndContinue(),
             "3" => SetGroupChatIdAndContinue(),
             "4" => await DownloadLatestServerLogAndContinueAsync(),
+            "5" => SetSteamWebApiKeyAndContinue(),
             "0" => ConsoleAction.Exit,
             _ => InvalidChoice()
         };
@@ -128,6 +133,12 @@ public sealed class BotConsoleApp
         return null;
     }
 
+    private ConsoleAction? SetSteamWebApiKeyAndContinue()
+    {
+        SetSteamWebApiKey();
+        return null;
+    }
+
     private ConsoleAction? InvalidChoice()
     {
         System.Console.WriteLine("Invalid choice.");
@@ -167,5 +178,34 @@ public sealed class BotConsoleApp
         });
 
         System.Console.WriteLine("Group chat ID saved.");
+    }
+
+    private void SetSteamWebApiKey()
+    {
+        var apiKey = ConsolePrompts.ReadLine("Enter Steam Web API key (empty to clear): ");
+
+        if (!string.IsNullOrWhiteSpace(apiKey))
+        {
+            _store.SaveSteamWebApiKey(apiKey.Trim());
+            System.Console.WriteLine("Steam Web API key saved.");
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(_store.LoadSteamWebApiKey()))
+        {
+            System.Console.WriteLine("Steam Web API key is already not set.");
+            return;
+        }
+
+        var confirm = ConsolePrompts.ReadLine("Clear Steam Web API key? (y/n): ");
+        if (!confirm.Equals("y", StringComparison.OrdinalIgnoreCase)
+            && !confirm.Equals("yes", StringComparison.OrdinalIgnoreCase))
+        {
+            System.Console.WriteLine("Cancelled.");
+            return;
+        }
+
+        _store.ClearSteamWebApiKey();
+        System.Console.WriteLine("Steam Web API key cleared. Restart the bot if it is running.");
     }
 }
