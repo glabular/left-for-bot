@@ -31,6 +31,7 @@ public sealed class ServerFtpClient : IServerFtpClient
         try
         {
             var client = await EnsureConnectedAsync(cancellationToken);
+
             return new FtpSession(this, client);
         }
         catch
@@ -53,6 +54,7 @@ public sealed class ServerFtpClient : IServerFtpClient
             try
             {
                 await _client.Connect(cancellationToken);
+
                 return _client;
             }
             catch
@@ -72,12 +74,33 @@ public sealed class ServerFtpClient : IServerFtpClient
 
         await client.Connect(cancellationToken);
         _client = client;
+
         return _client;
     }
 
     internal void ReleaseGate()
     {
         _gate.Release();
+    }
+
+    public async Task ResetConnectionAsync(CancellationToken cancellationToken)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+
+        await _gate.WaitAsync(cancellationToken);
+
+        try
+        {
+            if (_client is not null)
+            {
+                await SafeDisposeAsync(_client);
+                _client = null;
+            }
+        }
+        finally
+        {
+            _gate.Release();
+        }
     }
 
     public async ValueTask DisposeAsync()

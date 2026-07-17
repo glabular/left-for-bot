@@ -11,6 +11,7 @@ public sealed class ServerLogSyncService
 {
     private const string PreferredInboxDirectory = @"D:\temp\left4dead_logs";
     private const int MaxDownloadAttempts = 3;
+    private const int MaxListAttempts = 2;
 
     private static readonly TimeSpan RetryBaseDelay = TimeSpan.FromSeconds(2);
 
@@ -125,15 +126,43 @@ public sealed class ServerLogSyncService
 
         var datesLabel = string.Join(", ", calendarDates.Select(date => date.ToString("dd.MM.yyyy")));
 
+        IFtpSession? session = null;
         try
         {
-            await using var session = await _ftpClient.BeginSessionAsync(cancellationToken);
+            IReadOnlyList<RemoteFileInfo> remoteFiles = [];
 
-            _logger.LogDebug("Listing remote directory {RemoteDirectory}", remoteDirectory);
+            for (var attempt = 1; attempt <= MaxListAttempts; attempt++)
+            {
+                session = await _ftpClient.BeginSessionAsync(cancellationToken);
 
-            var remoteFiles = await session.ListFilesAsync(
-                remoteDirectory,
-                cancellationToken);
+                try
+                {
+                    _logger.LogDebug("Listing remote directory {RemoteDirectory}", remoteDirectory);
+
+                    remoteFiles = await session.ListFilesAsync(
+                        remoteDirectory,
+                        cancellationToken);
+
+                    break;
+                }
+                catch (Exception ex) when (attempt < MaxListAttempts && IsTransientFtpError(ex, cancellationToken))
+                {
+                    _logger.LogWarning(
+                        ex,
+                        "FTP listing attempt {Attempt}/{MaxAttempts} failed for {RemoteDirectory}",
+                        attempt,
+                        MaxListAttempts,
+                        remoteDirectory);
+
+                    // Drop the stale connection before retrying: dispose the session to release
+                    // the gate, then force the shared client to reconnect on the next session.
+                    await session.DisposeAsync();
+                    session = null;
+
+                    await _ftpClient.ResetConnectionAsync(cancellationToken);
+                    await Task.Delay(RetryBaseDelay * attempt, cancellationToken);
+                }
+            }
 
             var matchedFiles = remoteFiles
                 .Where(matchesFile)
@@ -174,7 +203,7 @@ public sealed class ServerLogSyncService
                     : FtpLocalExists.Overwrite;
 
                 await DownloadFileWithRetryAsync(
-                    session,
+                    session!,
                     file.FullPath,
                     localPath,
                     existsMode,
@@ -195,6 +224,13 @@ public sealed class ServerLogSyncService
 
             return TodayLogDownloadResult.Failed(
                 $"Не удалось скачать логи с сервера: {ex.Message}");
+        }
+        finally
+        {
+            if (session is not null)
+            {
+                await session.DisposeAsync();
+            }
         }
     }
 
@@ -258,7 +294,10 @@ public sealed class ServerLogSyncService
 
         for (var ex = exception; ex is not null; ex = ex.InnerException)
         {
-            if (ex is TimeoutException or IOException or SocketException or FtpException)
+            // NullReferenceException is the signature FluentFTP throws when a reused
+            // connection has gone stale (e.g. after idle overnight polling); treat it as
+            // transient so we can reconnect and retry instead of failing the whole command.
+            if (ex is TimeoutException or IOException or SocketException or FtpException or NullReferenceException)
             {
                 return true;
             }
