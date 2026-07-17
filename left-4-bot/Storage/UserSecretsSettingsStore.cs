@@ -57,7 +57,7 @@ public sealed class UserSecretsSettingsStore
         WriteSecrets(secrets);
     }
 
-    public bool HasToken() => !string.IsNullOrWhiteSpace(Load().Token);
+    public bool HasBotToken() => !string.IsNullOrWhiteSpace(Load().Token);
 
     private Dictionary<string, string?> LoadSecretsDictionary()
     {

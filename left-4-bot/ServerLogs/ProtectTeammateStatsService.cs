@@ -7,11 +7,11 @@ public sealed class ProtectTeammateStatsService
     /// The server logs are downloaded and scanned once by <see cref="PlayStatsService"/>,
     /// so this method does no FTP or file work.
     /// </summary>
-    public ProtectTeammateSectionData BuildSection(GamingDayLogScanResult scan)
+    public ProtectTeammateSectionData CreateProtectTeammateSection(GamingDayLogScanResult scan)
     {
         if (scan.ProtectTeammatePlayers.Count == 0)
         {
-            return ProtectTeammateSectionData.CleanDay(scan.PriorityPlayerPresent);
+            return ProtectTeammateSectionData.NoEventsWithPriorityPresent(scan.PriorityPlayerPresent);
         }
 
         return ProtectTeammateSectionData.HasData(

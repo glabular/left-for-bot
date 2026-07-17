@@ -159,7 +159,7 @@ public sealed class TelegramBotHostedService : BackgroundService
 
     private void ResetBackoffIfRecovered()
     {
-        if (!_connectionMonitor.ReportRecovered())
+        if (!_connectionMonitor.TryMarkConnectionRestored())
         {
             return;
         }

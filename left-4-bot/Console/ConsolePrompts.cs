@@ -24,18 +24,37 @@ public static class ConsolePrompts
         }
     }
 
-    public static string MaskToken(string token)
+    /// <summary>
+    /// Masks a secret value before it is displayed or logged.
+    /// </summary>
+    /// <param name="secretString">
+    /// The secret value to mask.
+    /// </param>
+    /// <returns>
+    /// <list type="bullet">
+    /// <item>
+    /// <description><c>"(not set)"</c> if <paramref name="secretString"/> is <see langword="null"/>, empty, or contains only whitespace.</description>
+    /// </item>
+    /// <item>
+    /// <description><c>"****"</c> if the token is 9 characters or fewer.</description>
+    /// </item>
+    /// <item>
+    /// <description>The first 9 characters of the token followed by <c>"****"</c> for longer tokens.</description>
+    /// </item>
+    /// </list>
+    /// </returns>
+    public static string MaskSecret(string secretString)
     {
-        if (string.IsNullOrWhiteSpace(token))
+        if (string.IsNullOrWhiteSpace(secretString))
         {
             return "(not set)";
         }
 
-        if (token.Length <= 9)
+        if (secretString.Length <= 9)
         {
             return "****";
         }
 
-        return token[..9] + "****";
+        return secretString[..9] + "****";
     }
 }

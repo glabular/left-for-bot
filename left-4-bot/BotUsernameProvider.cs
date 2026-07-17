@@ -9,7 +9,7 @@ public sealed class BotUsernameProvider
 
     public BotUsernameProvider(ITelegramBotClient bot) => _bot = bot;
 
-    public async Task<string> GetUsernameAsync(CancellationToken cancellationToken)
+    public async Task<string> GetBotUsernameAsync(CancellationToken cancellationToken)
     {
         if (_username is not null)
         {

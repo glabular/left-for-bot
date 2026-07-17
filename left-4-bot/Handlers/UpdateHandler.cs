@@ -86,7 +86,7 @@ public sealed class UpdateHandler : IUpdateHandler
         Message message,
         CancellationToken cancellationToken)
     {
-        var botUsername = await _usernameProvider.GetUsernameAsync(cancellationToken);
+        var botUsername = await _usernameProvider.GetBotUsernameAsync(cancellationToken);
 
         if (!CommandParser.TryGetCommand(message, botUsername, out var command, out var args))
         {

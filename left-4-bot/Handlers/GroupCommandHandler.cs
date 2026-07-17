@@ -155,7 +155,7 @@ public sealed class GroupCommandHandler
         switch (command.ToLowerInvariant())
         {
             case "map":
-                await HandleGoldenMapAsync(bot, message, cancellationToken);
+                await HandleRandomGoldenMapAsync(bot, message, cancellationToken);
                 break;
 
             case "addmap":
@@ -219,11 +219,11 @@ public sealed class GroupCommandHandler
         {
             if (repliedUser is not null && !repliedUser.IsBot)
             {
-                await ToggleFromReplyAsync(bot, message, repliedUser, cancellationToken);
+                await ToggleCallListEntryFromReplyAsync(bot, message, repliedUser, cancellationToken);
                 return;
             }
 
-            var phrase = _callList.PickPhrase();
+            var phrase = _callList.PickRandomCallPhrase();
             if (phrase is null)
             {
                 await bot.SendMessage(
@@ -233,7 +233,7 @@ public sealed class GroupCommandHandler
                 return;
             }
 
-            var entries = _callList.GetEntries();
+            var entries = _callList.GetCallListEntries();
             if (entries.Count == 0)
             {
                 await bot.SendMessage(
@@ -280,7 +280,7 @@ public sealed class GroupCommandHandler
 
         // Args without reply: toggle by @username only.
         var nickArg = args.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)[0];
-        if (!CallListService.TryNormalize(nickArg, out var username))
+        if (!CallListService.TryNormalizeUsername(nickArg, out var username))
         {
             await bot.SendMessage(
                 message.Chat.Id,
@@ -303,7 +303,7 @@ public sealed class GroupCommandHandler
         await bot.SendMessage(message.Chat.Id, textResult, cancellationToken: cancellationToken);
     }
 
-    private async Task ToggleFromReplyAsync(
+    private async Task ToggleCallListEntryFromReplyAsync(
         ITelegramBotClient bot,
         Message message,
         User repliedUser,
@@ -362,7 +362,7 @@ public sealed class GroupCommandHandler
         return $"<a href=\"tg://user?id={id}\">{name}</a>";
     }
 
-    private async Task HandleGoldenMapAsync(
+    private async Task HandleRandomGoldenMapAsync(
         ITelegramBotClient bot,
         Message message,
         CancellationToken cancellationToken)
@@ -420,7 +420,7 @@ public sealed class GroupCommandHandler
             return;
         }
 
-        var (allowed, result) = await TryApplyPoolEditAsync(
+        var (allowed, result) = await TryEditGoldenPoolWithDailyLimitAsync(
             bot,
             message,
             () => _goldenPool.TryAdd(args),
@@ -463,7 +463,7 @@ public sealed class GroupCommandHandler
             return;
         }
 
-        var (allowed, result) = await TryApplyPoolEditAsync(
+        var (allowed, result) = await TryEditGoldenPoolWithDailyLimitAsync(
             bot,
             message,
             () => _goldenPool.TryRemove(args),
@@ -514,7 +514,7 @@ public sealed class GroupCommandHandler
 
         if (string.IsNullOrWhiteSpace(args))
         {
-            statsTask = _playStats.GetTodayStatsAsync(cancellationToken);
+            statsTask = _playStats.GetCurrentGamingDayStatsAsync(cancellationToken);
         }
         else if (!DateOnly.TryParseExact(
             args,
@@ -542,7 +542,7 @@ public sealed class GroupCommandHandler
 
         var result = await statsTask;
 
-        await PlayStatsMessageSender.SendAsync(
+        await PlayStatsMessageSender.SendStatMessagesAsync(
             bot,
             message.Chat.Id,
             result.Messages,
@@ -583,7 +583,7 @@ public sealed class GroupCommandHandler
             return;
         }
 
-        var begin = await _restartService.TrySendQuitAsync(
+        var begin = await _restartService.TryBeginServerRestartAsync(
             message.From?.Id,
             message.From?.Username,
             cancellationToken);
@@ -685,7 +685,7 @@ public sealed class GroupCommandHandler
                 return;
             }
 
-            var enabled = _whoisState.Toggle();
+            var enabled = _whoisState.ToggleAutoCheckEnabled();
             var feedback = enabled
                 ? "Проверка игроков включена.\nБот будет писать в группу при подключении новых игроков."
                 : "Проверка игроков выключена.";
@@ -762,13 +762,13 @@ public sealed class GroupCommandHandler
         }
 
         var players = RconStatusPlayerParser.Parse(result.Message);
-        await _whoisService.ReportPlayersAsync(
+        await _whoisService.SendWhoisReportAsync(
             bot,
             message.Chat.Id,
             players,
             cancellationToken);
 
-        var announced = _whoisService.FilterNonPriority(players);
+        var announced = _whoisService.ExcludePriorityPlayers(players);
         _whoisSessionTracker.MarkAnnounced(announced.Select(p => p.ClassicSteamId));
     }
 
@@ -795,7 +795,7 @@ public sealed class GroupCommandHandler
             cancellationToken: cancellationToken);
     }
 
-    private async Task<(bool Allowed, T Result)> TryApplyPoolEditAsync<T>(
+    private async Task<(bool Allowed, T Result)> TryEditGoldenPoolWithDailyLimitAsync<T>(
         ITelegramBotClient bot,
         Message message,
         Func<T> applyEdit,

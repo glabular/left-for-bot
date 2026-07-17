@@ -23,7 +23,7 @@ public sealed class ProtectTeammateSectionData
     public static ProtectTeammateSectionData NoLogs() =>
         new() { State = ProtectTeammateSectionState.NoLogs };
 
-    public static ProtectTeammateSectionData CleanDay(bool priorityPlayerPresent) =>
+    public static ProtectTeammateSectionData NoEventsWithPriorityPresent(bool priorityPlayerPresent) =>
         new()
         {
             State = ProtectTeammateSectionState.CleanDay,

@@ -23,22 +23,22 @@ public static class FriendlyFireReportBuilder
 
         var messages = new List<PlayStatsOutboundMessage>
         {
-            SilentHtml(FormatIntro()),
+            CreateQuietHtmlMessage(FormatIntro()),
         };
 
         switch (data.State)
         {
             case FriendlyFireSectionState.CleanDay:
-                messages.Add(SilentHtml(CleanDayText));
+                messages.Add(CreateQuietHtmlMessage(CleanDayText));
                 break;
 
             case FriendlyFireSectionState.HasHits:
-                messages.Add(SilentHtml(FormatPriorityBlock(data.Attackers, prioritySteamIds)));
+                messages.Add(CreateQuietHtmlMessage(FormatPriorityBlock(data.Attackers, prioritySteamIds)));
 
                 var othersText = FormatOthersBlock(data.Attackers, prioritySteamIds);
                 if (othersText is not null)
                 {
-                    messages.Add(SilentHtml(othersText));
+                    messages.Add(CreateQuietHtmlMessage(othersText));
                 }
 
                 break;
@@ -229,7 +229,7 @@ public static class FriendlyFireReportBuilder
             .OrderByDescending(v => v.HitCount)
             .ThenBy(v => v.Name, StringComparer.OrdinalIgnoreCase);
 
-    private static PlayStatsOutboundMessage SilentHtml(string text) =>
+    private static PlayStatsOutboundMessage CreateQuietHtmlMessage(string text) =>
         new()
         {
             Text = text,

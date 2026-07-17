@@ -37,7 +37,7 @@ public sealed class TelegramConnectionMonitor
             source);
     }
 
-    public bool ReportRecovered()
+    public bool TryMarkConnectionRestored()
     {
         if (!_wasDisconnected)
         {

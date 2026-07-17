@@ -47,7 +47,7 @@ public sealed class CallListService
         _phrases = new List<string>(options.Value.Phrases);
     }
 
-    public IReadOnlyList<CallListEntry> GetEntries()
+    public IReadOnlyList<CallListEntry> GetCallListEntries()
     {
         lock (_sync)
         {
@@ -70,7 +70,7 @@ public sealed class CallListService
     /// <summary>
     /// Random phrase from the pool, or null if the pool is empty.
     /// </summary>
-    public string? PickPhrase()
+    public string? PickRandomCallPhrase()
     {
         lock (_sync)
         {
@@ -85,7 +85,7 @@ public sealed class CallListService
 
     public CallToggleResult TryToggleUsername(string rawUsername)
     {
-        if (!TryNormalize(rawUsername, out var username))
+        if (!TryNormalizeUsername(rawUsername, out var username))
         {
             return CallToggleResult.Invalid;
         }
@@ -273,11 +273,9 @@ public sealed class CallListService
     }
 
     /// <summary>Kept for callers that used the old name.</summary>
-    public CallToggleResult TryToggle(string rawUsername) => TryToggleUsername(rawUsername);
-
-    public static bool TryNormalize(string? raw, out string username)
+    public static bool TryNormalizeUsername(string? raw, out string username)
     {
-        username = "";
+        username = string.Empty;
 
         if (string.IsNullOrWhiteSpace(raw))
         {
@@ -296,6 +294,7 @@ public sealed class CallListService
         }
 
         username = trimmed;
+
         return true;
     }
 

@@ -27,7 +27,7 @@ internal class Program
 
             if (action == ConsoleAction.StartBot)
             {
-                if (!store.HasToken())
+                if (!store.HasBotToken())
                 {
                     Console.WriteLine("Token required. Configure it first.");
                     continue;

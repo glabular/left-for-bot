@@ -20,7 +20,7 @@ public sealed class WhoisSessionTracker
         _gamingDayOptions = gamingDayOptions;
     }
 
-    internal void ApplyActivities(IReadOnlyList<WhoisLogActivity> activities)
+    internal void UpdateOnlinePlayersFromLog(IReadOnlyList<WhoisLogActivity> activities)
     {
         lock (_gate)
         {
@@ -46,7 +46,7 @@ public sealed class WhoisSessionTracker
         }
     }
 
-    public IReadOnlyList<WhoisPlayerRef> TakeUnannounced(IReadOnlyList<WhoisPlayerRef> candidates)
+    public IReadOnlyList<WhoisPlayerRef> FilterUnannouncedPlayers(IReadOnlyList<WhoisPlayerRef> candidates)
     {
         lock (_gate)
         {

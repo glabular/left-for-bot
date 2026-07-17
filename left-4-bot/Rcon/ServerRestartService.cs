@@ -20,7 +20,7 @@ public sealed class ServerRestartService
         _logger = logger;
     }
 
-    public async Task<ServerRestartOutcome?> TrySendQuitAsync(
+    public async Task<ServerRestartOutcome?> TryBeginServerRestartAsync(
         long? userId,
         string? username,
         CancellationToken cancellationToken)
@@ -39,7 +39,7 @@ public sealed class ServerRestartService
                 userId,
                 username ?? "unknown");
 
-            if (!await _rcon.IsOnlineAsync(cancellationToken))
+            if (!await _rcon.IsRconReachableAsync(cancellationToken))
             {
                 ReleaseMutex();
                 return new ServerRestartOutcome(
@@ -82,7 +82,7 @@ public sealed class ServerRestartService
                 cancellationToken.ThrowIfCancellationRequested();
                 await Task.Delay(pollInterval, cancellationToken);
 
-                if (await _rcon.IsOnlineAsync(cancellationToken))
+                if (await _rcon.IsRconReachableAsync(cancellationToken))
                 {
                     return new ServerRestartOutcome(
                         ServerRestartState.ServerOnline,

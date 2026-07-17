@@ -28,7 +28,7 @@ public sealed class PlayStatsService
             StringComparer.Ordinal);
     }
 
-    public Task<PlayStatsResult> GetTodayStatsAsync(CancellationToken cancellationToken) =>
+    public Task<PlayStatsResult> GetCurrentGamingDayStatsAsync(CancellationToken cancellationToken) =>
         GetStatsForGamingDayAsync(GamingDay.GetCurrentAnchor(_gamingDayOptions), cancellationToken);
 
     public async Task<PlayStatsResult> GetStatsForGamingDayAsync(
@@ -51,7 +51,7 @@ public sealed class PlayStatsService
             && protectTeammate.State == ProtectTeammateSectionState.DownloadFailed)
         {
             return PlayStatsReportBuilder.BuildError(
-                FormatError(MapDownloadError(playStatsDownload.Message)));
+                FormatError(FormatUserFacingDownloadError(playStatsDownload.Message)));
         }
 
         Dictionary<string, PlayerDayStats>? players = null;
@@ -158,14 +158,14 @@ public sealed class PlayStatsService
             _prioritySteamIds);
 
         return (
-            _friendlyFireStats.BuildSection(scan),
-            _protectTeammateStats.BuildSection(scan));
+            _friendlyFireStats.CreateFriendlyFireSection(scan),
+            _protectTeammateStats.CreateProtectTeammateSection(scan));
     }
 
     private static string FormatError(string details) =>
         $"⚠️ Не удалось получить статистику.\n\n{details}";
 
-    private static string MapDownloadError(string message)
+    private static string FormatUserFacingDownloadError(string message)
     {
         if (message.Contains("user-secrets", StringComparison.OrdinalIgnoreCase)
             || message.Contains("not configured", StringComparison.OrdinalIgnoreCase))

@@ -41,7 +41,7 @@ public sealed class ServerRconService
         CancellationToken cancellationToken = default) =>
         ExecuteAsync(command, cancellationToken);
 
-    public async Task<bool> IsOnlineAsync(CancellationToken cancellationToken)
+    public async Task<bool> IsRconReachableAsync(CancellationToken cancellationToken)
     {
         var result = await TryExecuteAsync("status", cancellationToken);
         return result.IsSuccess;

@@ -23,7 +23,7 @@ public sealed class FriendlyFireSectionData
     public static FriendlyFireSectionData NoLogs() =>
         new() { State = FriendlyFireSectionState.NoLogs };
 
-    public static FriendlyFireSectionData CleanDay(bool priorityPlayerPresent) =>
+    public static FriendlyFireSectionData NoEventsWithPriorityPresent(bool priorityPlayerPresent) =>
         new()
         {
             State = FriendlyFireSectionState.CleanDay,

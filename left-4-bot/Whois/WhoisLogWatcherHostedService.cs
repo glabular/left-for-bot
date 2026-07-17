@@ -102,7 +102,7 @@ public sealed class WhoisLogWatcherHostedService : BackgroundService
                 continue;
             }
 
-            _sessionTracker.ApplyActivities(activities);
+            _sessionTracker.UpdateOnlinePlayersFromLog(activities);
 
             foreach (var activity in activities)
             {
@@ -137,14 +137,14 @@ public sealed class WhoisLogWatcherHostedService : BackgroundService
 
         _missingApiKeyNotified = false;
 
-        var filtered = _whoisService.FilterNonPriority(enteredThisTick);
-        var toAnnounce = _sessionTracker.TakeUnannounced(filtered);
+        var filtered = _whoisService.ExcludePriorityPlayers(enteredThisTick);
+        var toAnnounce = _sessionTracker.FilterUnannouncedPlayers(filtered);
         if (toAnnounce.Count == 0)
         {
             return;
         }
 
-        await _whoisService.ReportPlayersAsync(
+        await _whoisService.SendWhoisReportAsync(
             _bot,
             _botSettings.GroupChatId,
             toAnnounce,

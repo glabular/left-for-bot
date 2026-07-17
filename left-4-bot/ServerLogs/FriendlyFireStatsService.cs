@@ -7,11 +7,11 @@ public sealed class FriendlyFireStatsService
     /// The server logs are downloaded and scanned once by <see cref="PlayStatsService"/>,
     /// so this method does no FTP or file work.
     /// </summary>
-    public FriendlyFireSectionData BuildSection(GamingDayLogScanResult scan)
+    public FriendlyFireSectionData CreateFriendlyFireSection(GamingDayLogScanResult scan)
     {
         if (scan.Attackers.Count == 0)
         {
-            return FriendlyFireSectionData.CleanDay(scan.PriorityPlayerPresent);
+            return FriendlyFireSectionData.NoEventsWithPriorityPresent(scan.PriorityPlayerPresent);
         }
 
         return FriendlyFireSectionData.HasHits(scan.Attackers, scan.PriorityPlayerPresent);

@@ -21,7 +21,7 @@ public sealed class BotConsoleApp
     {
         while (true)
         {
-            if (!_store.HasToken())
+            if (!_store.HasBotToken())
             {
                 if (!await ShowNoTokenMenuAsync())
                 {
@@ -50,7 +50,7 @@ public sealed class BotConsoleApp
         switch (System.Console.ReadLine()?.Trim())
         {
             case "1":
-                SetToken();
+                PromptAndSaveBotToken();
                 return false;
             case "4":
                 await DownloadLatestServerLogAsync();
@@ -71,9 +71,9 @@ public sealed class BotConsoleApp
         System.Console.WriteLine();
         var steamWebApiKey = _store.LoadSteamWebApiKey();
 
-        System.Console.WriteLine($"Token: {ConsolePrompts.MaskToken(settings.Token)}");
+        System.Console.WriteLine($"Token: {ConsolePrompts.MaskSecret(settings.Token)}");
         System.Console.WriteLine($"Group chat ID: {settings.GroupChatId}");
-        System.Console.WriteLine($"Steam Web API key: {ConsolePrompts.MaskToken(steamWebApiKey)}");
+        System.Console.WriteLine($"Steam Web API key: {ConsolePrompts.MaskSecret(steamWebApiKey)}");
         System.Console.WriteLine("1) Start bot");
         System.Console.WriteLine("2) Change bot token");
         System.Console.WriteLine("3) Set group chat ID (0 = discovery mode)");
@@ -84,10 +84,10 @@ public sealed class BotConsoleApp
         return System.Console.ReadLine()?.Trim() switch
         {
             "1" => ConsoleAction.StartBot,
-            "2" => SetTokenAndContinue(),
-            "3" => SetGroupChatIdAndContinue(),
+            "2" => PromptAndSaveBotTokenAndContinue(),
+            "3" => PromptAndSaveGroupChatIdAndContinue(),
             "4" => await DownloadLatestServerLogAndContinueAsync(),
-            "5" => SetSteamWebApiKeyAndContinue(),
+            "5" => PromptAndSaveSteamWebApiKeyAndContinue(),
             "0" => ConsoleAction.Exit,
             _ => InvalidChoice()
         };
@@ -121,21 +121,21 @@ public sealed class BotConsoleApp
         System.Console.WriteLine(result.Message);
     }
 
-    private ConsoleAction? SetTokenAndContinue()
+    private ConsoleAction? PromptAndSaveBotTokenAndContinue()
     {
-        SetToken();
+        PromptAndSaveBotToken();
         return null;
     }
 
-    private ConsoleAction? SetGroupChatIdAndContinue()
+    private ConsoleAction? PromptAndSaveGroupChatIdAndContinue()
     {
-        SetGroupChatId();
+        PromptAndSaveGroupChatId();
         return null;
     }
 
-    private ConsoleAction? SetSteamWebApiKeyAndContinue()
+    private ConsoleAction? PromptAndSaveSteamWebApiKeyAndContinue()
     {
-        SetSteamWebApiKey();
+        PromptAndSaveSteamWebApiKey();
         return null;
     }
 
@@ -145,7 +145,7 @@ public sealed class BotConsoleApp
         return null;
     }
 
-    private void SetToken()
+    private void PromptAndSaveBotToken()
     {
         var token = ConsolePrompts.ReadLine("Enter bot token: ");
 
@@ -166,7 +166,7 @@ public sealed class BotConsoleApp
         System.Console.WriteLine("Token saved.");
     }
 
-    private void SetGroupChatId()
+    private void PromptAndSaveGroupChatId()
     {
         var groupChatId = ConsolePrompts.ReadLong("Enter group chat ID (0 for discovery): ");
         var current = _store.Load();
@@ -180,7 +180,7 @@ public sealed class BotConsoleApp
         System.Console.WriteLine("Group chat ID saved.");
     }
 
-    private void SetSteamWebApiKey()
+    private void PromptAndSaveSteamWebApiKey()
     {
         var apiKey = ConsolePrompts.ReadLine("Enter Steam Web API key (empty to clear): ");
 

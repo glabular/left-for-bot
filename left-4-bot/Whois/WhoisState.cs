@@ -16,7 +16,7 @@ public sealed class WhoisState
         }
     }
 
-    public bool Toggle()
+    public bool ToggleAutoCheckEnabled()
     {
         lock (_gate)
         {

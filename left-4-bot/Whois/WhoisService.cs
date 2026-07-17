@@ -28,7 +28,7 @@ public sealed class WhoisService
 
     public bool HasApiKey => _steamProfiles.HasApiKey;
 
-    public IReadOnlyList<WhoisPlayerRef> FilterNonPriority(IEnumerable<WhoisPlayerRef> players)
+    public IReadOnlyList<WhoisPlayerRef> ExcludePriorityPlayers(IEnumerable<WhoisPlayerRef> players)
     {
         var priority = _priorityPlayers.Value.SteamIds
             .Where(id => !string.IsNullOrWhiteSpace(id))
@@ -41,7 +41,7 @@ public sealed class WhoisService
             .ToList();
     }
 
-    public async Task ReportPlayersAsync(
+    public async Task SendWhoisReportAsync(
         ITelegramBotClient bot,
         long chatId,
         IReadOnlyList<WhoisPlayerRef> players,
@@ -57,7 +57,7 @@ public sealed class WhoisService
             return;
         }
 
-        var filtered = FilterNonPriority(players);
+        var filtered = ExcludePriorityPlayers(players);
         if (filtered.Count == 0)
         {
             await bot.SendMessage(

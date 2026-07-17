@@ -9,7 +9,7 @@ public static class PlayStatsMessageSender
 {
     private static readonly TimeSpan CategorySendDelay = TimeSpan.FromSeconds(1);
 
-    public static async Task SendAsync(
+    public static async Task SendStatMessagesAsync(
         ITelegramBotClient bot,
         ChatId chatId,
         IReadOnlyList<PlayStatsOutboundMessage> messages,
