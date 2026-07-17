@@ -1,5 +1,4 @@
-﻿using System.Globalization;
-using left_4_bot.Call;
+﻿using left_4_bot.Call;
 using left_4_bot.L4D2;
 using left_4_bot.Rcon;
 using left_4_bot.ServerLogs;
@@ -28,7 +27,7 @@ public sealed class GroupCommandHandler
         /call "фраза" — добавить или удалить фразу созыва.
         Ответьте /call на сообщение человека — добавить/удалить если у него нет юзернейма.
 
-        /stat [дд.мм.гггг] — статистика за день (без даты — текущий).
+        /stat [дата] — статистика за день (без даты — текущий).
 
         /status — статус сервера.
         /restart да | /restart yes — перезагрузить сервер.
@@ -516,22 +515,30 @@ public sealed class GroupCommandHandler
         {
             statsTask = _playStats.GetCurrentGamingDayStatsAsync(cancellationToken);
         }
-        else if (!DateOnly.TryParseExact(
-            args,
-            "dd.MM.yyyy",
-            CultureInfo.InvariantCulture,
-            DateTimeStyles.None,
-            out var gamingDay))
-        {
-            await bot.SendMessage(
-                message.Chat.Id,
-                "Некорректная дата.\nТребуется формат /stat [дд.мм.гггг]  " +
-                "\n\nНапример\n/stat 01.02.2026\nИли без параметра, чтобы получить статистику за сегодня\n/stat",
-                cancellationToken: cancellationToken);
-            return;
-        }
         else
         {
+            var today = DateOnly.FromDateTime(GamingDay.NowMoscow());
+            if (!StatDateParser.TryParse(args, today, out var gamingDay))
+            {
+                await bot.SendMessage(
+                    message.Chat.Id,
+                    """
+                    Некорректная дата.
+
+                    Напишите дату после команды. Варианты:
+                    /stat 13 — 13 число текущего месяца
+                    /stat 13.01 — 13 января текущего года
+                    /stat 01.02.26 — 1 февраля 2026
+                    /stat 01.02.2026 — полная дата
+
+                    Без параметра — статистика за сегодня:
+                    /stat
+                    """,
+                    cancellationToken: cancellationToken);
+
+                return;
+            }
+
             statsTask = _playStats.GetStatsForGamingDayAsync(gamingDay, cancellationToken);
         }
 
