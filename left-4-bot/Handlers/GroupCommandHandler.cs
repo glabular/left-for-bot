@@ -703,11 +703,12 @@ public sealed class GroupCommandHandler
             return;
         }
 
-        if (trimmed.Equals("status", StringComparison.OrdinalIgnoreCase))
+        if (trimmed.Equals("status", StringComparison.OrdinalIgnoreCase) ||
+            trimmed.Equals("s", StringComparison.OrdinalIgnoreCase))
         {
             var statusText = _whoisState.Enabled
-                ? "Статус: автопроверка заходов сейчас включена."
-                : "Статус: автопроверка заходов сейчас выключена.";
+                ? "\U0001f7e2 Статус команды whois: автопроверка заходов сейчас включена."
+                : "⛔ Статус команды whois: автопроверка заходов сейчас выключена.";
 
             await bot.SendMessage(
                 message.Chat.Id,
