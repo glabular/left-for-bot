@@ -7,22 +7,15 @@ namespace left_4_bot.Handlers;
 
 public static class PlayStatsMessageSender
 {
-    private static readonly TimeSpan CategorySendDelay = TimeSpan.FromSeconds(1);
-
+    // Spacing between messages is handled by ThrottlingTelegramBotClient (global send throttle).
     public static async Task SendStatMessagesAsync(
         ITelegramBotClient bot,
         ChatId chatId,
         IReadOnlyList<PlayStatsOutboundMessage> messages,
         CancellationToken cancellationToken)
     {
-        for (var i = 0; i < messages.Count; i++)
+        foreach (var msg in messages)
         {
-            if (i > 0 && messages[i].DisableNotification)
-            {
-                await Task.Delay(CategorySendDelay, cancellationToken);
-            }
-
-            var msg = messages[i];
             await bot.SendMessage(
                 chatId,
                 msg.Text,

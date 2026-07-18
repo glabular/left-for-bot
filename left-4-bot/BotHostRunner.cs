@@ -3,10 +3,12 @@ using left_4_bot.Handlers;
 using left_4_bot.L4D2;
 using left_4_bot.Rcon;
 using left_4_bot.ServerLogs;
+using left_4_bot.TelegramClient;
 using left_4_bot.Whois;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 using Telegram.Bot;
 
 namespace left_4_bot;
@@ -30,7 +32,10 @@ public static class BotHostRunner
         builder.Services.AddWhois(builder.Configuration);
         builder.Services.AddSingleton(settings);
         builder.Services.AddSingleton<TelegramConnectionMonitor>();
-        builder.Services.AddSingleton<ITelegramBotClient>(_ => new TelegramBotClient(settings.Token));
+        builder.Services.AddSingleton<ITelegramBotClient>(sp =>
+            new ThrottlingTelegramBotClient(
+                new TelegramBotClient(settings.Token),
+                sp.GetRequiredService<ILogger<ThrottlingTelegramBotClient>>()));
         builder.Services.AddHostedService<TelegramBotHostedService>();
         builder.Services.AddSingleton<UpdateHandler>();
         builder.Services.AddSingleton<BotUsernameProvider>();
