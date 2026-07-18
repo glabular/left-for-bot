@@ -8,6 +8,9 @@ using Microsoft.Extensions.Options;
 
 namespace left_4_bot.Call;
 
+/// <summary>
+/// Manages the call list in memory and persists changes to appsettings.Local.json.
+/// </summary>
 public sealed class CallListService
 {
     private static readonly JsonDocumentOptions JsonReadOptions = new()
@@ -18,12 +21,12 @@ public sealed class CallListService
     private static readonly JsonSerializerOptions JsonWriteOptions = new()
     {
         WriteIndented = true,
-        // Keep Cyrillic (and other non-ASCII) readable in appsettings.json instead of \uXXXX.
+        // Keep Cyrillic (and other non-ASCII) readable in appsettings.Local.json instead of \uXXXX.
         Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
     };
 
     /// <summary>
-    /// Telegram usernames: 5–32 chars, Latin letters, digits, underscores.
+    /// Matches a valid Telegram username: 5–32 Latin letters, digits, or underscores.
     /// </summary>
     private static readonly Regex UsernamePattern = new(
         @"^[A-Za-z0-9_]{5,32}$",
@@ -36,6 +39,10 @@ public sealed class CallListService
     private List<string> _phrases;
     private readonly object _sync = new();
 
+    /// <summary>
+    /// Initializes the service from <see cref="CallListOptions"/>.
+    /// </summary>
+    /// <param name="options">Bound call-list configuration.</param>
     public CallListService(IOptions<CallListOptions> options)
     {
         _projectAppSettingsPath = AppSettingsPathResolver.ResolveProjectAppSettingsPath();
@@ -47,6 +54,10 @@ public sealed class CallListService
         _phrases = new List<string>(options.Value.Phrases);
     }
 
+    /// <summary>
+    /// Returns the current call-list entries (usernames, then users by id).
+    /// </summary>
+    /// <returns>A snapshot of entries; empty when the list has no members.</returns>
     public IReadOnlyList<CallListEntry> GetCallListEntries()
     {
         lock (_sync)
@@ -68,8 +79,9 @@ public sealed class CallListService
     }
 
     /// <summary>
-    /// Random phrase from the pool, or null if the pool is empty.
+    /// Picks a random phrase from the pool.
     /// </summary>
+    /// <returns>A phrase, or <see langword="null"/> if the pool is empty.</returns>
     public string? PickRandomCallPhrase()
     {
         lock (_sync)
@@ -83,6 +95,11 @@ public sealed class CallListService
         }
     }
 
+    /// <summary>
+    /// Adds or removes a Telegram username on the call list and saves the change.
+    /// </summary>
+    /// <param name="rawUsername">Username with or without a leading <c>@</c>.</param>
+    /// <returns>Whether the username was added, removed, invalid, or failed to save.</returns>
     public CallToggleResult TryToggleUsername(string rawUsername)
     {
         if (!TryNormalizeUsername(rawUsername, out var username))
@@ -122,9 +139,12 @@ public sealed class CallListService
     }
 
     /// <summary>
-    /// Toggle by Telegram user id. On add, stores <paramref name="displayName"/>.
-    /// On remove, <paramref name="label"/> is the name that was stored.
+    /// Adds or removes a user by Telegram id and saves the change.
     /// </summary>
+    /// <param name="userId">Telegram numeric user id.</param>
+    /// <param name="displayName">Name stored when adding the user.</param>
+    /// <param name="label">On remove, the stored display name; otherwise the trimmed <paramref name="displayName"/>.</param>
+    /// <returns>Whether the user was added, removed, invalid, or failed to save.</returns>
     public CallToggleResult TryToggleUser(
         long userId,
         string displayName,
@@ -176,12 +196,14 @@ public sealed class CallListService
     }
 
     /// <summary>
-    /// Toggle a ping phrase. Comparison is case-insensitive.
-    /// On success, <paramref name="label"/> is the phrase as stored (or as given on add).
+    /// Adds or removes a ping phrase (case-insensitive) and saves the change.
     /// </summary>
+    /// <param name="phrase">Phrase to toggle.</param>
+    /// <param name="label">The phrase as stored, or as given when adding.</param>
+    /// <returns>Whether the phrase was added, removed, invalid, or failed to save.</returns>
     public CallToggleResult TryTogglePhrase(string phrase, out string label)
     {
-        label = "";
+        label = string.Empty;
 
         if (string.IsNullOrWhiteSpace(phrase))
         {
@@ -224,18 +246,23 @@ public sealed class CallListService
     }
 
     /// <summary>
-    /// Parses <c>"phrase text"</c> from command args. Returns false if not a quoted phrase form
-    /// (caller should treat as username) or if quotes are present but invalid.
+    /// Tries to parse a quoted phrase from command arguments.
     /// </summary>
+    /// <param name="args">Raw command arguments.</param>
+    /// <param name="phrase">Parsed inner phrase when the method returns <see langword="true"/>.</param>
     /// <param name="looksLikeQuotedPhrase">
-    /// True when args start with <c>"</c> — even if invalid (empty / unclosed).
+    /// <see langword="true"/> when <paramref name="args"/> start with <c>"</c>, even if the quotes are invalid.
     /// </param>
+    /// <returns>
+    /// <see langword="true"/> if a non-empty quoted phrase was parsed; otherwise <see langword="false"/>
+    /// (treat as username, unless <paramref name="looksLikeQuotedPhrase"/> is <see langword="true"/>).
+    /// </returns>
     public static bool TryParseQuotedPhrase(
         string args,
         out string phrase,
         out bool looksLikeQuotedPhrase)
     {
-        phrase = "";
+        phrase = string.Empty;
         looksLikeQuotedPhrase = false;
 
         if (string.IsNullOrWhiteSpace(args))
@@ -272,7 +299,12 @@ public sealed class CallListService
         return true;
     }
 
-    /// <summary>Kept for callers that used the old name.</summary>
+    /// <summary>
+    /// Strips a leading <c>@</c> and validates a Telegram username.
+    /// </summary>
+    /// <param name="raw">Raw username input.</param>
+    /// <param name="username">Normalized username when the method returns <see langword="true"/>.</param>
+    /// <returns><see langword="true"/> if <paramref name="raw"/> is a valid Telegram username.</returns>
     public static bool TryNormalizeUsername(string? raw, out string username)
     {
         username = string.Empty;
@@ -298,6 +330,10 @@ public sealed class CallListService
         return true;
     }
 
+    /// <summary>
+    /// Writes the current call list to project and runtime appsettings.Local.json files.
+    /// </summary>
+    /// <returns><see langword="true"/> if the files were written; otherwise <see langword="false"/>.</returns>
     private bool TrySave()
     {
         try
