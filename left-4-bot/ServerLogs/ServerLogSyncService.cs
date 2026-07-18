@@ -13,6 +13,10 @@ public sealed class ServerLogSyncService
     private const int MaxDownloadAttempts = 3;
     private const int MaxListAttempts = 2;
 
+    // How far back from the newest .log a file may be modified and still count as "active".
+    // Keeps the just-closed file in view briefly across a map rotation so joins are not dropped.
+    private const int ActiveLogWindowMinutes = 5;
+
     private static readonly TimeSpan RetryBaseDelay = TimeSpan.FromSeconds(2);
 
     private const string SetupHint =
@@ -57,6 +61,24 @@ public sealed class ServerLogSyncService
         CancellationToken cancellationToken) =>
         DownloadLogFilesAsync([moscowDate], moscowDate.ToString("dd.MM.yyyy"), cancellationToken);
 
+    /// <summary>
+    /// Downloads the log file(s) the server is currently writing to (selected by the most recent
+    /// modification time), regardless of the calendar date in the file name. This is what the
+    /// whois watcher needs: after Moscow midnight srcds keeps appending to the file it opened the
+    /// previous day, so a date-based lookup would silently miss live joins.
+    /// </summary>
+    public Task<TodayLogDownloadResult> DownloadActiveLogFilesAsync(
+        CancellationToken cancellationToken) =>
+        DownloadRemoteFilesAsync(
+            "активные логи",
+            _options.RemoteLogDirectory,
+            ResolveLocalInboxDirectory(),
+            SelectActiveLogFiles,
+            emptyFilesMessage: _ => "На сервере нет активных лог-файлов.",
+            downloadedFilesMessage: (count, _, names) =>
+                $"Downloaded {count} active log file(s): {names}",
+            cancellationToken);
+
     private Task<TodayLogDownloadResult> DownloadLogFilesAsync(
         IReadOnlyList<DateOnly> calendarDates,
         string? periodDescription,
@@ -67,16 +89,19 @@ public sealed class ServerLogSyncService
             .Distinct(StringComparer.Ordinal)
             .ToList();
 
+        var datesLabel = periodDescription ?? FormatDatesLabel(calendarDates);
+
         return DownloadRemoteFilesAsync(
-            calendarDates,
-            periodDescription,
+            datesLabel,
             _options.RemoteLogDirectory,
             ResolveLocalInboxDirectory(),
-            file => file.Name.EndsWith(".log", StringComparison.OrdinalIgnoreCase)
-                && dateTokens.Any(token => file.Name.Contains(token, StringComparison.Ordinal)),
-            emptyFilesMessage: datesLabel => $"За {datesLabel} на сервере нет лог-файлов.",
-            downloadedFilesMessage: (count, datesLabel, names) =>
-                $"Downloaded {count} log file(s) for {datesLabel}: {names}",
+            files => files
+                .Where(file => file.Name.EndsWith(".log", StringComparison.OrdinalIgnoreCase)
+                    && dateTokens.Any(token => file.Name.Contains(token, StringComparison.Ordinal)))
+                .ToList(),
+            emptyFilesMessage: label => $"За {label} на сервере нет лог-файлов.",
+            downloadedFilesMessage: (count, label, names) =>
+                $"Downloaded {count} log file(s) for {label}: {names}",
             cancellationToken);
     }
 
@@ -90,25 +115,55 @@ public sealed class ServerLogSyncService
             .Distinct(StringComparer.Ordinal)
             .ToList();
 
+        var datesLabel = periodDescription ?? FormatDatesLabel(calendarDates);
+
         return DownloadRemoteFilesAsync(
-            calendarDates,
-            periodDescription,
+            datesLabel,
             ResolveRemotePlayStatsDirectory(),
             ResolveLocalPlayStatsInboxDirectory(),
-            file => file.Name.EndsWith(".txt", StringComparison.OrdinalIgnoreCase)
-                && datePrefixes.Any(prefix => file.Name.StartsWith(prefix, StringComparison.Ordinal)),
-            emptyFilesMessage: datesLabel => $"За {datesLabel} на сервере нет playstats-файлов.",
-            downloadedFilesMessage: (count, datesLabel, names) =>
-                $"Downloaded {count} playstats file(s) for {datesLabel}: {names}",
+            files => files
+                .Where(file => file.Name.EndsWith(".txt", StringComparison.OrdinalIgnoreCase)
+                    && datePrefixes.Any(prefix => file.Name.StartsWith(prefix, StringComparison.Ordinal)))
+                .ToList(),
+            emptyFilesMessage: label => $"За {label} на сервере нет playstats-файлов.",
+            downloadedFilesMessage: (count, label, names) =>
+                $"Downloaded {count} playstats file(s) for {label}: {names}",
             cancellationToken);
     }
 
+    private static string FormatDatesLabel(IReadOnlyList<DateOnly> calendarDates)
+    {
+        return string.Join(", ", calendarDates.Select(date => date.ToString("dd.MM.yyyy")));
+    }
+
+    private static IReadOnlyList<RemoteFileInfo> SelectActiveLogFiles(
+        IReadOnlyList<RemoteFileInfo> files)
+    {
+        var logs = files
+            .Where(f => f.Name.EndsWith(".log", StringComparison.OrdinalIgnoreCase))
+            .ToList();
+
+        if (logs.Count == 0)
+        {
+            return [];
+        }
+
+        // srcds writes to a single active file; pick it by newest modification time. The window
+        // also keeps the just-closed file for a short while so a map rotation does not drop joins
+        // written right around the switch.
+        var newest = logs.Max(f => f.Modified);
+        var window = TimeSpan.FromMinutes(ActiveLogWindowMinutes);
+
+        return logs
+            .Where(f => newest - f.Modified <= window)
+            .ToList();
+    }
+
     private async Task<TodayLogDownloadResult> DownloadRemoteFilesAsync(
-        IReadOnlyList<DateOnly> calendarDates,
-        string? periodDescription,
+        string logContext,
         string remoteDirectory,
         string localInbox,
-        Func<RemoteFileInfo, bool> matchesFile,
+        Func<IReadOnlyList<RemoteFileInfo>, IReadOnlyList<RemoteFileInfo>> selectFiles,
         Func<string, string> emptyFilesMessage,
         Func<int, string, string, string> downloadedFilesMessage,
         CancellationToken cancellationToken)
@@ -118,13 +173,6 @@ public sealed class ServerLogSyncService
         {
             return TodayLogDownloadResult.Failed(validationError);
         }
-
-        if (calendarDates.Count == 0)
-        {
-            return TodayLogDownloadResult.Succeeded([], "No calendar dates requested.");
-        }
-
-        var datesLabel = string.Join(", ", calendarDates.Select(date => date.ToString("dd.MM.yyyy")));
 
         IFtpSession? session = null;
         try
@@ -164,8 +212,7 @@ public sealed class ServerLogSyncService
                 }
             }
 
-            var matchedFiles = remoteFiles
-                .Where(matchesFile)
+            var matchedFiles = selectFiles(remoteFiles)
                 .DistinctBy(file => file.Name, StringComparer.OrdinalIgnoreCase)
                 .OrderBy(file => file.Name)
                 .ToList();
@@ -174,11 +221,9 @@ public sealed class ServerLogSyncService
 
             if (matchedFiles.Count == 0)
             {
-                var description = periodDescription ?? datesLabel;
-
                 return TodayLogDownloadResult.Succeeded(
                     [],
-                    emptyFilesMessage(description));
+                    emptyFilesMessage(logContext));
             }
 
             var localPaths = new List<string>(matchedFiles.Count);
@@ -216,11 +261,11 @@ public sealed class ServerLogSyncService
 
             return TodayLogDownloadResult.Succeeded(
                 localPaths,
-                downloadedFilesMessage(matchedFiles.Count, datesLabel, fileNames));
+                downloadedFilesMessage(matchedFiles.Count, logContext, fileNames));
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to download server files for dates {Dates}", datesLabel);
+            _logger.LogError(ex, "Failed to download server files for {Context}", logContext);
 
             return TodayLogDownloadResult.Failed(
                 $"Не удалось скачать логи с сервера: {ex.Message}");

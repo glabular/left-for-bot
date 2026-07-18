@@ -21,6 +21,14 @@ public sealed class WhoisLogWatcherHostedService : BackgroundService
     private readonly Dictionary<string, long> _offsets = new(StringComparer.OrdinalIgnoreCase);
     private bool _missingApiKeyNotified;
 
+    // True once the first successful poll after enabling has seeked all current files to EOF.
+    // Before priming we skip history; after priming, a newly rotated-in file is read from the start.
+    private bool _primed;
+
+    // Tracks whether the last log download failed, so we log the failure/recovery only on the
+    // transition instead of spamming a warning every poll while FTP is down.
+    private bool _downloadFailing;
+
     public WhoisLogWatcherHostedService(
         ServerLogSyncService logSync,
         WhoisState state,
@@ -81,22 +89,36 @@ public sealed class WhoisLogWatcherHostedService : BackgroundService
             }
 
             _missingApiKeyNotified = false;
+            _downloadFailing = false;
+            _primed = false;
 
             return;
         }
 
-        var download = await _logSync.DownloadTodayLogFilesAsync(cancellationToken);
+        var download = await _logSync.DownloadActiveLogFilesAsync(cancellationToken);
         if (!download.IsSuccess)
         {
-            _logger.LogDebug("Whois log sync: {Message}", download.Message);
+            if (!_downloadFailing)
+            {
+                _downloadFailing = true;
+                _logger.LogWarning("Whois log sync failed: {Message}", download.Message);
+            }
+
             return;
         }
 
+        if (_downloadFailing)
+        {
+            _downloadFailing = false;
+            _logger.LogInformation("Whois log sync recovered");
+        }
+
+        var priming = !_primed;
         var enteredThisTick = new List<WhoisPlayerRef>();
 
         foreach (var path in download.LocalFilePaths)
         {
-            var activities = ReadNewActivities(path);
+            var activities = ReadNewActivities(path, priming);
             if (activities.Count == 0)
             {
                 continue;
@@ -114,6 +136,13 @@ public sealed class WhoisLogWatcherHostedService : BackgroundService
         }
 
         PruneOffsets(download.LocalFilePaths);
+
+        // Only consider ourselves primed once we have actually anchored to at least one file, so an
+        // early empty poll (server idle / no active log yet) does not later replay history.
+        if (priming && download.LocalFilePaths.Count > 0)
+        {
+            _primed = true;
+        }
 
         if (enteredThisTick.Count == 0)
         {
@@ -153,7 +182,7 @@ public sealed class WhoisLogWatcherHostedService : BackgroundService
         _sessionTracker.MarkAnnounced(toAnnounce.Select(p => p.ClassicSteamId));
     }
 
-    private IReadOnlyList<WhoisLogActivity> ReadNewActivities(string filePath)
+    private IReadOnlyList<WhoisLogActivity> ReadNewActivities(string filePath, bool priming)
     {
         if (!File.Exists(filePath))
         {
@@ -162,11 +191,18 @@ public sealed class WhoisLogWatcherHostedService : BackgroundService
 
         var length = new FileInfo(filePath).Length;
 
-        if (!_offsets.TryGetValue(filePath, out var offset))
+        if (priming)
         {
-            // First attach: seek EOF so we never replay history.
+            // First poll after enabling: seek every current file to EOF so we never replay history.
             _offsets[filePath] = length;
             return [];
+        }
+
+        if (!_offsets.TryGetValue(filePath, out var offset))
+        {
+            // A file we have not seen before appearing mid-session means the server rotated to a
+            // new log. Read it from the start so joins written right after rotation are not missed.
+            offset = 0;
         }
 
         if (length < offset)
