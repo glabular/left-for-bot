@@ -19,6 +19,10 @@ public static class BotHostRunner
     {
         var builder = Host.CreateApplicationBuilder();
 
+        builder.Configuration.AddJsonFile(
+            "appsettings.Local.json",
+            optional: true,
+            reloadOnChange: false);
         builder.Configuration.AddUserSecrets(typeof(Program).Assembly);
         builder.Services.Configure<GoldenPoolOptions>(
             builder.Configuration.GetSection("GoldenPool"));

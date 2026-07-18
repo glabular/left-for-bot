@@ -260,7 +260,7 @@ public sealed class GroupCommandHandler
                 CallToggleResult.Added => $"Добавлена фраза: {phraseLabel}",
                 CallToggleResult.Removed => $"Удалена фраза: {phraseLabel}",
                 CallToggleResult.Invalid => CallPhraseUsageText,
-                CallToggleResult.SaveFailed => "Не удалось сохранить список в appsettings.json.",
+                CallToggleResult.SaveFailed => "Не удалось сохранить список в appsettings.Local.json.",
                 _ => "Не удалось изменить список фраз.",
             };
 
@@ -295,7 +295,7 @@ public sealed class GroupCommandHandler
             CallToggleResult.Removed => $"Удалён: @{username}",
             CallToggleResult.Invalid =>
                 "Некорректный ник. Telegram username: 5–32 символов (латиница, цифры, _).\n\n" + CallUsageText,
-            CallToggleResult.SaveFailed => "Не удалось сохранить список в appsettings.json.",
+            CallToggleResult.SaveFailed => "Не удалось сохранить список в appsettings.Local.json.",
             _ => "Не удалось изменить список.",
         };
 
@@ -316,7 +316,7 @@ public sealed class GroupCommandHandler
             {
                 CallToggleResult.Added => $"Добавлен: @{repliedUser.Username}",
                 CallToggleResult.Removed => $"Удалён: @{repliedUser.Username}",
-                CallToggleResult.SaveFailed => "Не удалось сохранить список в appsettings.json.",
+                CallToggleResult.SaveFailed => "Не удалось сохранить список в appsettings.Local.json.",
                 _ => "Не удалось изменить список.",
             };
 
@@ -331,7 +331,7 @@ public sealed class GroupCommandHandler
             CallToggleResult.Added => $"Добавлен: {label}",
             CallToggleResult.Removed => $"Удалён: {label}",
             CallToggleResult.Invalid => "Не удалось определить имя пользователя Telegram.",
-            CallToggleResult.SaveFailed => "Не удалось сохранить список в appsettings.json.",
+            CallToggleResult.SaveFailed => "Не удалось сохранить список в appsettings.Local.json.",
             _ => "Не удалось изменить список.",
         };
 
@@ -440,7 +440,7 @@ public sealed class GroupCommandHandler
             AddResult.UnknownCampaign
                 => $"Неизвестная кампания: {args}",
             AddResult.SaveFailed
-                => "Не удалось сохранить золотой пул в appsettings.json.",
+                => "Не удалось сохранить золотой пул в appsettings.Local.json.",
             _ => "Не удалось добавить кампанию."
         };
 
@@ -483,7 +483,7 @@ public sealed class GroupCommandHandler
             RemoveResult.UnknownCampaign
                 => $"Неизвестная кампания: {args}",
             RemoveResult.SaveFailed
-                => "Не удалось сохранить золотой пул в appsettings.json.",
+                => "Не удалось сохранить золотой пул в appsettings.Local.json.",
             _ => "Не удалось удалить кампанию."
         };
 

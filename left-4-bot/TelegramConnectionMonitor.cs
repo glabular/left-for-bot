@@ -4,7 +4,7 @@ namespace left_4_bot;
 
 /// <summary>
 /// Unified logging for Telegram connectivity blips.
-/// Set "left_4_bot": "Debug" in appsettings.json to see per-blip exception detail.
+/// Set "left_4_bot": "Debug" in appsettings.Local.json to see per-blip exception detail.
 /// </summary>
 public sealed class TelegramConnectionMonitor
 {
