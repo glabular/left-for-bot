@@ -1,3 +1,4 @@
+using left_4_bot.ServerLogs;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -9,7 +10,7 @@ namespace left_4_bot.Whois;
 public static class WhoisServiceCollectionExtensions
 {
     /// <summary>
-    /// Adds whois options, services, and the log watcher hosted service.
+    /// Adds whois options, services, and the shared log-tail consumer.
     /// </summary>
     /// <param name="services">Service collection to configure.</param>
     /// <param name="configuration">Application configuration.</param>
@@ -24,7 +25,7 @@ public static class WhoisServiceCollectionExtensions
         services.AddHttpClient(nameof(SteamPlayerProfileService));
         services.AddSingleton<SteamPlayerProfileService>();
         services.AddSingleton<WhoisService>();
-        services.AddHostedService<WhoisLogWatcherHostedService>();
+        services.AddSingleton<IServerLogTailConsumer, WhoisLogTailConsumer>();
 
         return services;
     }

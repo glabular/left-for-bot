@@ -14,9 +14,4 @@ public sealed class WhoisOptions
     /// Gets or sets the Steam Web API key.
     /// </summary>
     public string SteamWebApiKey { get; set; } = string.Empty;
-
-    /// <summary>
-    /// Gets or sets the log poll interval in seconds.
-    /// </summary>
-    public int PollIntervalSeconds { get; set; } = 15;
 }

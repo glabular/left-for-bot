@@ -1,28 +1,23 @@
 using System.Text;
-using left_4_bot.ServerLogs;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
-using Telegram.Bot;
 
-namespace left_4_bot.Whois;
+namespace left_4_bot.ServerLogs;
 
 /// <summary>
-/// Background service that polls server logs and announces new player joins.
+/// Background service that polls active server logs over FTP and fans out new byte slices
+/// to registered <see cref="IServerLogTailConsumer"/> instances.
 /// </summary>
-public sealed class WhoisLogWatcherHostedService : BackgroundService
+public sealed class ServerLogTailHostedService : BackgroundService
 {
     private readonly ServerLogSyncService _logSync;
-    private readonly WhoisState _state;
-    private readonly WhoisService _whoisService;
-    private readonly WhoisSessionTracker _sessionTracker;
+    private readonly IEnumerable<IServerLogTailConsumer> _consumers;
     private readonly BotSettings _botSettings;
-    private readonly ITelegramBotClient _bot;
-    private readonly IOptions<WhoisOptions> _options;
-    private readonly ILogger<WhoisLogWatcherHostedService> _logger;
+    private readonly IOptions<ServerLogTailOptions> _options;
+    private readonly ILogger<ServerLogTailHostedService> _logger;
 
     private readonly Dictionary<string, long> _offsets = new(StringComparer.OrdinalIgnoreCase);
-    private bool _missingApiKeyNotified;
 
     // True once the first successful poll after enabling has seeked all current files to EOF.
     // Before priming we skip history; after priming, a newly rotated-in file is read from the start.
@@ -33,32 +28,23 @@ public sealed class WhoisLogWatcherHostedService : BackgroundService
     private bool _downloadFailing;
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="WhoisLogWatcherHostedService"/> class.
+    /// Initializes a new instance of the <see cref="ServerLogTailHostedService"/> class.
     /// </summary>
     /// <param name="logSync">Service used to download active server log files.</param>
-    /// <param name="state">Shared whois enabled state.</param>
-    /// <param name="whoisService">Service used to send whois reports.</param>
-    /// <param name="sessionTracker">Tracker for online and announced players.</param>
+    /// <param name="consumers">Features that react to near-real-time log slices.</param>
     /// <param name="botSettings">Bot settings, including the group chat ID.</param>
-    /// <param name="bot">Telegram bot client.</param>
-    /// <param name="options">Whois configuration options.</param>
+    /// <param name="options">Log-tail configuration options.</param>
     /// <param name="logger">Logger for this service.</param>
-    public WhoisLogWatcherHostedService(
+    public ServerLogTailHostedService(
         ServerLogSyncService logSync,
-        WhoisState state,
-        WhoisService whoisService,
-        WhoisSessionTracker sessionTracker,
+        IEnumerable<IServerLogTailConsumer> consumers,
         BotSettings botSettings,
-        ITelegramBotClient bot,
-        IOptions<WhoisOptions> options,
-        ILogger<WhoisLogWatcherHostedService> logger)
+        IOptions<ServerLogTailOptions> options,
+        ILogger<ServerLogTailHostedService> logger)
     {
         _logSync = logSync;
-        _state = state;
-        _whoisService = whoisService;
-        _sessionTracker = sessionTracker;
+        _consumers = consumers;
         _botSettings = botSettings;
-        _bot = bot;
         _options = options;
         _logger = logger;
     }
@@ -70,9 +56,8 @@ public sealed class WhoisLogWatcherHostedService : BackgroundService
         using var timer = new PeriodicTimer(TimeSpan.FromSeconds(intervalSeconds));
 
         _logger.LogInformation(
-            "Whois log watcher started (interval {IntervalSeconds}s, enabled={Enabled})",
-            intervalSeconds,
-            _state.Enabled);
+            "Server log tail started (interval {IntervalSeconds}s)",
+            intervalSeconds);
 
         while (await timer.WaitForNextTickAsync(stoppingToken))
         {
@@ -86,30 +71,23 @@ public sealed class WhoisLogWatcherHostedService : BackgroundService
             }
             catch (Exception ex)
             {
-                _logger.LogWarning(ex, "Whois log poll failed");
+                _logger.LogWarning(ex, "Server log tail poll failed");
             }
         }
     }
 
     /// <summary>
-    /// Performs a single log poll and announces newly entered players when needed.
+    /// Performs a single poll: download active logs when any consumer wants them, then fan out slices.
     /// </summary>
     /// <param name="cancellationToken">Token used to cancel the poll.</param>
     private async Task PollOnceAsync(CancellationToken cancellationToken)
     {
-        // When whois is off (or there is no group to notify), do not touch FTP at all.
-        // Reset offsets so that when it is re-enabled the first poll re-seeks to EOF and never
+        // When nobody needs the tail (or there is no group to notify), do not touch FTP at all.
+        // Reset offsets so that when polling resumes the first tick re-seeks to EOF and never
         // replays historical log lines.
-        if (!_state.Enabled || _botSettings.GroupChatId == 0)
+        if (_botSettings.GroupChatId == 0 || !AnyConsumerWantsPolling())
         {
-            if (_offsets.Count > 0)
-            {
-                _offsets.Clear();
-            }
-
-            _missingApiKeyNotified = false;
-            _downloadFailing = false;
-            _primed = false;
+            ResetPollingState();
 
             return;
         }
@@ -121,7 +99,7 @@ public sealed class WhoisLogWatcherHostedService : BackgroundService
             if (!_downloadFailing)
             {
                 _downloadFailing = true;
-                _logger.LogWarning("Whois log sync failed: {Message}", download.Message);
+                _logger.LogWarning("Server log tail sync failed: {Message}", download.Message);
             }
 
             return;
@@ -130,29 +108,19 @@ public sealed class WhoisLogWatcherHostedService : BackgroundService
         if (_downloadFailing)
         {
             _downloadFailing = false;
-            _logger.LogInformation("Whois log sync recovered");
+            _logger.LogInformation("Server log tail sync recovered");
         }
 
         var priming = !_primed;
-        var enteredThisTick = new List<WhoisPlayerRef>();
+        var slices = new List<ServerLogTailSlice>();
 
         foreach (var path in download.LocalFilePaths)
         {
-            var activities = ReadNewActivities(path, priming);
+            var slice = ReadNewSlice(path, priming);
 
-            if (activities.Count == 0)
+            if (slice is not null)
             {
-                continue;
-            }
-
-            _sessionTracker.UpdateOnlinePlayersFromLog(activities);
-
-            foreach (var activity in activities)
-            {
-                if (activity.Kind == WhoisLogActivityKind.Entered)
-                {
-                    enteredThisTick.Add(activity.Player);
-                }
+                slices.Add(slice);
             }
         }
 
@@ -165,58 +133,73 @@ public sealed class WhoisLogWatcherHostedService : BackgroundService
             _primed = true;
         }
 
-        if (enteredThisTick.Count == 0)
+        if (slices.Count == 0)
         {
             return;
         }
 
-        if (!_whoisService.HasApiKey)
+        foreach (var consumer in _consumers)
         {
-            if (!_missingApiKeyNotified)
+            if (!consumer.WantsPolling)
             {
-                _missingApiKeyNotified = true;
-                _logger.LogWarning("Whois Steam Web API key is not configured");
-                await _bot.SendMessage(
-                    _botSettings.GroupChatId,
-                    WhoisService.MissingApiKeyMessage,
-                    cancellationToken: cancellationToken);
+                continue;
             }
 
-            return;
+            try
+            {
+                await consumer.OnNewSlicesAsync(slices, cancellationToken);
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(
+                    ex,
+                    "Server log tail consumer {Consumer} failed",
+                    consumer.GetType().Name);
+            }
         }
+    }
 
-        _missingApiKeyNotified = false;
-
-        var filtered = _whoisService.ExcludePriorityPlayers(enteredThisTick);
-        var toAnnounce = _sessionTracker.FilterUnannouncedPlayers(filtered);
-
-        if (toAnnounce.Count == 0)
+    private bool AnyConsumerWantsPolling()
+    {
+        foreach (var consumer in _consumers)
         {
-            return;
+            if (consumer.WantsPolling)
+            {
+                return true;
+            }
         }
 
-        await _whoisService.SendWhoisReportAsync(
-            _bot,
-            _botSettings.GroupChatId,
-            toAnnounce,
-            cancellationToken);
+        return false;
+    }
 
-        _sessionTracker.MarkAnnounced(toAnnounce.Select(p => p.ClassicSteamId));
+    private void ResetPollingState()
+    {
+        if (_offsets.Count > 0)
+        {
+            _offsets.Clear();
+        }
+
+        _downloadFailing = false;
+        _primed = false;
     }
 
     /// <summary>
-    /// Reads and parses new activity from a log file since the last known offset.
+    /// Reads new bytes from a log file since the last known offset.
     /// </summary>
     /// <param name="filePath">Local path of the log file.</param>
     /// <param name="priming">
-    /// <see langword="true"/> to seek to EOF without parsing historical lines.
+    /// <see langword="true"/> to seek to EOF without returning historical text.
     /// </param>
-    /// <returns>Parsed activities from the new file slice; empty when priming or unchanged.</returns>
-    private IReadOnlyList<WhoisLogActivity> ReadNewActivities(string filePath, bool priming)
+    /// <returns>A slice when new bytes exist; otherwise <see langword="null"/>.</returns>
+    private ServerLogTailSlice? ReadNewSlice(string filePath, bool priming)
     {
         if (!File.Exists(filePath))
         {
-            return [];
+            return null;
         }
 
         var length = new FileInfo(filePath).Length;
@@ -225,13 +208,14 @@ public sealed class WhoisLogWatcherHostedService : BackgroundService
         {
             // First poll after enabling: seek every current file to EOF so we never replay history.
             _offsets[filePath] = length;
-            return [];
+
+            return null;
         }
 
         if (!_offsets.TryGetValue(filePath, out var offset))
         {
             // A file we have not seen before appearing mid-session means the server rotated to a
-            // new log. Read it from the start so joins written right after rotation are not missed.
+            // new log. Read it from the start so events written right after rotation are not missed.
             offset = 0;
         }
 
@@ -243,12 +227,15 @@ public sealed class WhoisLogWatcherHostedService : BackgroundService
 
         if (length == offset)
         {
-            return [];
+            return null;
         }
 
-        var slice = ReadSlice(filePath, offset, length);
+        var text = ReadSlice(filePath, offset, length);
         _offsets[filePath] = length;
-        return WhoisLogActivityParser.Parse(slice);
+
+        return string.IsNullOrEmpty(text)
+            ? null
+            : new ServerLogTailSlice(filePath, text);
     }
 
     /// <summary>

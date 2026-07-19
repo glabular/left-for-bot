@@ -17,11 +17,14 @@ public static class ServerLogSyncServiceCollectionExtensions
             configuration.GetSection(GamingDayOptions.SectionName));
         services.Configure<PriorityPlayersOptions>(
             configuration.GetSection(PriorityPlayersOptions.SectionName));
+        services.Configure<ServerLogTailOptions>(
+            configuration.GetSection(ServerLogTailOptions.SectionName));
         services.AddSingleton<IServerFtpClient, ServerFtpClient>();
         services.AddSingleton<ServerLogSyncService>();
         services.AddSingleton<FriendlyFireStatsService>();
         services.AddSingleton<ProtectTeammateStatsService>();
         services.AddSingleton<PlayStatsService>();
+        services.AddHostedService<ServerLogTailHostedService>();
 
         return services;
     }
