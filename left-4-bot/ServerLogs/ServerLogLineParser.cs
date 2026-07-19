@@ -10,8 +10,10 @@ internal static partial class ServerLogLineParser
         RegexOptions.Compiled)]
     private static partial Regex TimestampRegex();
 
+    // Chat lines from SuperLogs append extra <Class><Alive>… fields after team; join lines do not.
+    // Match the common Name<uid><STEAM><team> prefix and ignore any trailing angle-bracket fields.
     [GeneratedRegex(
-        @"^(?<name>[^<]+)<(?<userid>\d+)><(?<steam>[^>]+)><(?<team>[^>]*)>$",
+        @"^(?<name>[^<]+)<(?<userid>\d+)><(?<steam>[^>]+)><(?<team>[^>]*)>",
         RegexOptions.Compiled)]
     private static partial Regex PlayerTokenRegex();
 

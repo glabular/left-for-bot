@@ -3,6 +3,7 @@ using left_4_bot.Handlers;
 using left_4_bot.L4D2;
 using left_4_bot.Rcon;
 using left_4_bot.ServerLogs;
+using left_4_bot.Spy;
 using left_4_bot.TelegramClient;
 using left_4_bot.Whois;
 using Microsoft.Extensions.Configuration;
@@ -34,6 +35,7 @@ public static class BotHostRunner
         builder.Services.AddServerLogSync(builder.Configuration);
         builder.Services.AddRcon(builder.Configuration);
         builder.Services.AddWhois(builder.Configuration);
+        builder.Services.AddSpy();
         builder.Services.AddSingleton(settings);
         builder.Services.AddSingleton<TelegramConnectionMonitor>();
         builder.Services.AddSingleton<ITelegramBotClient>(sp =>

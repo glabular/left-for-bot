@@ -2,6 +2,7 @@
 using left_4_bot.L4D2;
 using left_4_bot.Rcon;
 using left_4_bot.ServerLogs;
+using left_4_bot.Spy;
 using left_4_bot.Whois;
 using Telegram.Bot;
 using Telegram.Bot.Types;
@@ -38,6 +39,12 @@ public sealed class GroupCommandHandler
         /whois now — проверить всех, кто сейчас на сервере.
         /whois status — показать, включена ли сейчас автопроверка.
 
+        /spy — включить или выключить пересылку командного чата.
+        /spy on | /spy off — явно включить или выключить.
+        /spy status — показать, включён ли сейчас шпион.
+        Пересылается только командный чат; сообщения приоритетных игроков игнорируются.
+        В начале игрового дня шпион сам выключается.
+
         /help — эта справка.
         """;
 
@@ -47,6 +54,18 @@ public sealed class GroupCommandHandler
             /whois — включить или выключить автопроверку
             /whois now — проверить игроков, которые сейчас на сервере
             /whois status — показать текущий статус автопроверки
+        """;
+
+    private const string SpyUsageText =
+        """
+        Использование:
+            /spy — включить или выключить пересылку командного чата
+            /spy on — включить
+            /spy off — выключить
+            /spy status — показать текущий статус
+
+        Бот пересылает только командный чат (не общий).
+        Сообщения приоритетных игроков не показываются.
         """;
 
     private const string ServerSetupText =
@@ -121,6 +140,7 @@ public sealed class GroupCommandHandler
     private readonly WhoisState _whoisState;
     private readonly WhoisService _whoisService;
     private readonly WhoisSessionTracker _whoisSessionTracker;
+    private readonly SpyState _spyState;
 
     public GroupCommandHandler(
         GoldenPoolService goldenPool,
@@ -131,7 +151,8 @@ public sealed class GroupCommandHandler
         ServerRestartService restartService,
         WhoisState whoisState,
         WhoisService whoisService,
-        WhoisSessionTracker whoisSessionTracker)
+        WhoisSessionTracker whoisSessionTracker,
+        SpyState spyState)
     {
         _goldenPool = goldenPool;
         _editLimiter = editLimiter;
@@ -142,6 +163,7 @@ public sealed class GroupCommandHandler
         _whoisState = whoisState;
         _whoisService = whoisService;
         _whoisSessionTracker = whoisSessionTracker;
+        _spyState = spyState;
     }
 
     public async Task HandleAsync(
@@ -199,6 +221,10 @@ public sealed class GroupCommandHandler
 
             case "whois":
                 await HandleWhoisAsync(bot, message, args, cancellationToken);
+                break;
+
+            case "spy":
+                await HandleSpyAsync(bot, message, args, cancellationToken);
                 break;
 
             default:
@@ -727,6 +753,68 @@ public sealed class GroupCommandHandler
         await bot.SendMessage(
             message.Chat.Id,
             WhoisUsageText,
+            cancellationToken: cancellationToken);
+    }
+
+    private async Task HandleSpyAsync(
+        ITelegramBotClient bot,
+        Message message,
+        string args,
+        CancellationToken cancellationToken)
+    {
+        var trimmed = args.Trim();
+
+        if (string.IsNullOrEmpty(trimmed))
+        {
+            var enabled = _spyState.Toggle();
+            var feedback = enabled
+                ? "Шпион включён.\nБот будет беззвучно пересылать командный чат (кроме приоритетных игроков)."
+                : "Шпион выключен.";
+
+            await bot.SendMessage(
+                message.Chat.Id,
+                feedback,
+                cancellationToken: cancellationToken);
+            return;
+        }
+
+        if (trimmed.Equals("on", StringComparison.OrdinalIgnoreCase))
+        {
+            _spyState.Set(true);
+            await bot.SendMessage(
+                message.Chat.Id,
+                "Шпион включён.\nБот будет беззвучно пересылать командный чат (кроме приоритетных игроков).",
+                cancellationToken: cancellationToken);
+            return;
+        }
+
+        if (trimmed.Equals("off", StringComparison.OrdinalIgnoreCase))
+        {
+            _spyState.Set(false);
+            await bot.SendMessage(
+                message.Chat.Id,
+                "Шпион выключен.",
+                cancellationToken: cancellationToken);
+            return;
+        }
+
+        if (trimmed.Equals("status", StringComparison.OrdinalIgnoreCase) ||
+            trimmed.Equals("s", StringComparison.OrdinalIgnoreCase))
+        {
+            var statusText = _spyState.Enabled
+                ? "\U0001f7e2 Статус команды spy: пересылка командного чата сейчас включена."
+                : "⛔ Статус команды spy: пересылка командного чата сейчас выключена.";
+
+            await bot.SendMessage(
+                message.Chat.Id,
+                statusText,
+                cancellationToken: cancellationToken);
+            return;
+        }
+
+        await bot.SendMessage(
+            message.Chat.Id,
+            SpyUsageText,
             cancellationToken: cancellationToken);
     }
 

@@ -13,5 +13,5 @@ public sealed class ServerLogTailOptions
     /// <summary>
     /// Gets or sets the log poll interval in seconds.
     /// </summary>
-    public int PollIntervalSeconds { get; set; } = 15;
+    public int PollIntervalSeconds { get; set; } = 10;
 }
