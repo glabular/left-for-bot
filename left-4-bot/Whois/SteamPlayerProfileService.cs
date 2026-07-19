@@ -5,12 +5,21 @@ using Microsoft.Extensions.Options;
 
 namespace left_4_bot.Whois;
 
+/// <summary>
+/// Loads Steam playtime and VAC ban data for whois reports.
+/// </summary>
 public sealed class SteamPlayerProfileService
 {
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly WhoisOptions _options;
     private readonly ILogger<SteamPlayerProfileService> _logger;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="SteamPlayerProfileService"/> class.
+    /// </summary>
+    /// <param name="httpClientFactory">Factory used to create Steam API HTTP clients.</param>
+    /// <param name="options">Whois configuration options.</param>
+    /// <param name="logger">Logger for this service.</param>
     public SteamPlayerProfileService(
         IHttpClientFactory httpClientFactory,
         IOptions<WhoisOptions> options,
@@ -21,11 +30,24 @@ public sealed class SteamPlayerProfileService
         _logger = logger;
     }
 
+    /// <summary>
+    /// Gets a value indicating whether a Steam Web API key is configured.
+    /// </summary>
     public bool HasApiKey => !string.IsNullOrWhiteSpace(_options.SteamWebApiKey);
 
+    /// <summary>
+    /// Creates an <see cref="HttpClient"/> for Steam Web API calls.
+    /// </summary>
+    /// <returns>A named HTTP client instance.</returns>
     private HttpClient CreateClient() =>
         _httpClientFactory.CreateClient(nameof(SteamPlayerProfileService));
 
+    /// <summary>
+    /// Fetches Steam profiles for the given players.
+    /// </summary>
+    /// <param name="players">Players to look up.</param>
+    /// <param name="cancellationToken">Token used to cancel the operation.</param>
+    /// <returns>Profiles with playtime and VAC data when available.</returns>
     public async Task<IReadOnlyList<SteamPlayerProfile>> GetProfilesAsync(
         IReadOnlyList<WhoisPlayerRef> players,
         CancellationToken cancellationToken)
@@ -43,6 +65,7 @@ public sealed class SteamPlayerProfileService
         }
 
         var steam64ByClassic = new Dictionary<string, ulong>(StringComparer.Ordinal);
+
         foreach (var player in players)
         {
             if (SteamIdConverter.TryToSteam64(player.ClassicSteamId, out var steam64))
@@ -54,6 +77,7 @@ public sealed class SteamPlayerProfileService
         var vacBySteam64 = await GetVacCountsAsync(steam64ByClassic.Values.ToList(), cancellationToken);
 
         var results = new List<SteamPlayerProfile>(players.Count);
+
         foreach (var player in players)
         {
             if (!steam64ByClassic.TryGetValue(player.ClassicSteamId, out var steam64))
@@ -75,11 +99,18 @@ public sealed class SteamPlayerProfileService
         return results;
     }
 
+    /// <summary>
+    /// Loads VAC ban counts for Steam64 identifiers.
+    /// </summary>
+    /// <param name="steam64Ids">Steam64 IDs to query.</param>
+    /// <param name="cancellationToken">Token used to cancel the operation.</param>
+    /// <returns>Map of Steam64 ID to VAC ban count, or <see langword="null"/> when unknown.</returns>
     private async Task<Dictionary<ulong, int?>> GetVacCountsAsync(
         IReadOnlyList<ulong> steam64Ids,
         CancellationToken cancellationToken)
     {
         var result = new Dictionary<ulong, int?>();
+
         if (steam64Ids.Count == 0)
         {
             return result;
@@ -151,6 +182,12 @@ public sealed class SteamPlayerProfileService
         return result;
     }
 
+    /// <summary>
+    /// Loads L4D1 and L4D2 playtime hours for a Steam64 identifier.
+    /// </summary>
+    /// <param name="steam64">Steam64 ID to query.</param>
+    /// <param name="cancellationToken">Token used to cancel the operation.</param>
+    /// <returns>Playtime hours for L4D2 and L4D1, or <see langword="null"/> when unavailable.</returns>
     private async Task<(int? L4d2Hours, int? L4d1Hours)> GetPlaytimeHoursAsync(
         ulong steam64,
         CancellationToken cancellationToken)
@@ -169,9 +206,11 @@ public sealed class SteamPlayerProfileService
                 + $"&input_json={Uri.EscapeDataString(input)}";
 
             using var response = await CreateClient().GetAsync(url, cancellationToken);
+
             if (!response.IsSuccessStatusCode)
             {
                 _logger.LogWarning("GetOwnedGames failed with {StatusCode}", response.StatusCode);
+
                 return (null, null);
             }
 
@@ -224,6 +263,7 @@ public sealed class SteamPlayerProfileService
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             _logger.LogWarning(ex, "GetOwnedGames request failed for {Steam64}", steam64);
+
             return (null, null);
         }
     }

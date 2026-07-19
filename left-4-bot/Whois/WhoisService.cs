@@ -7,8 +7,14 @@ using Telegram.Bot.Types.Enums;
 
 namespace left_4_bot.Whois;
 
+/// <summary>
+/// Builds and sends Telegram whois reports for players.
+/// </summary>
 public sealed class WhoisService
 {
+    /// <summary>
+    /// Message shown when the Steam Web API key is not configured.
+    /// </summary>
     public const string MissingApiKeyMessage =
         "Steam API ключ не настроен. Задайте его в меню бота.";
 
@@ -16,6 +22,12 @@ public sealed class WhoisService
     private readonly IOptions<PriorityPlayersOptions> _priorityPlayers;
     private readonly ILogger<WhoisService> _logger;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="WhoisService"/> class.
+    /// </summary>
+    /// <param name="steamProfiles">Service used to load Steam profile data.</param>
+    /// <param name="priorityPlayers">Priority players excluded from reports.</param>
+    /// <param name="logger">Logger for this service.</param>
     public WhoisService(
         SteamPlayerProfileService steamProfiles,
         IOptions<PriorityPlayersOptions> priorityPlayers,
@@ -26,8 +38,16 @@ public sealed class WhoisService
         _logger = logger;
     }
 
+    /// <summary>
+    /// Gets a value indicating whether a Steam Web API key is configured.
+    /// </summary>
     public bool HasApiKey => _steamProfiles.HasApiKey;
 
+    /// <summary>
+    /// Removes priority players and duplicates from the candidate list.
+    /// </summary>
+    /// <param name="players">Players to filter.</param>
+    /// <returns>Filtered unique non-priority players.</returns>
     public IReadOnlyList<WhoisPlayerRef> ExcludePriorityPlayers(IEnumerable<WhoisPlayerRef> players)
     {
         var priority = _priorityPlayers.Value.SteamIds
@@ -41,6 +61,13 @@ public sealed class WhoisService
             .ToList();
     }
 
+    /// <summary>
+    /// Sends an HTML whois report for the given players to a Telegram chat.
+    /// </summary>
+    /// <param name="bot">Telegram bot client.</param>
+    /// <param name="chatId">Target chat identifier.</param>
+    /// <param name="players">Players to include in the report.</param>
+    /// <param name="cancellationToken">Token used to cancel the operation.</param>
     public async Task SendWhoisReportAsync(
         ITelegramBotClient bot,
         long chatId,
@@ -54,16 +81,19 @@ public sealed class WhoisService
                 chatId,
                 MissingApiKeyMessage,
                 cancellationToken: cancellationToken);
+
             return;
         }
 
         var filtered = ExcludePriorityPlayers(players);
+
         if (filtered.Count == 0)
         {
             await bot.SendMessage(
                 chatId,
                 "Нет игроков для проверки (сервер пуст или на сервере только свои).",
                 cancellationToken: cancellationToken);
+
             return;
         }
 
@@ -77,6 +107,11 @@ public sealed class WhoisService
             cancellationToken: cancellationToken);
     }
 
+    /// <summary>
+    /// Formats Steam profiles into an HTML whois report.
+    /// </summary>
+    /// <param name="profiles">Profiles to format.</param>
+    /// <returns>HTML report text.</returns>
     internal static string FormatReport(IReadOnlyList<SteamPlayerProfile> profiles)
     {
         var builder = new StringBuilder();
@@ -105,6 +140,11 @@ public sealed class WhoisService
         return builder.ToString().TrimEnd();
     }
 
+    /// <summary>
+    /// Formats playtime hours for display, or <c>н/д</c> when unknown.
+    /// </summary>
+    /// <param name="hours">Playtime in hours, or <see langword="null"/> if unavailable.</param>
+    /// <returns>Display string for the hours value.</returns>
     private static string FormatHours(int? hours) =>
         hours is null ? "н/д" : $"{hours.Value} ч";
 }

@@ -2,6 +2,9 @@ using System.Text.RegularExpressions;
 
 namespace left_4_bot.Whois;
 
+/// <summary>
+/// Parses player rows from an RCON <c>status</c> response.
+/// </summary>
 public static partial class RconStatusPlayerParser
 {
     // Typical: # 2 "Name" STEAM_1:0:12345 00:12 ...
@@ -11,6 +14,11 @@ public static partial class RconStatusPlayerParser
         RegexOptions.Compiled | RegexOptions.CultureInvariant)]
     private static partial Regex StatusPlayerLineRegex();
 
+    /// <summary>
+    /// Extracts unique players from RCON status text.
+    /// </summary>
+    /// <param name="statusText">Raw <c>status</c> command output.</param>
+    /// <returns>Parsed players, deduplicated by Steam ID.</returns>
     public static IReadOnlyList<WhoisPlayerRef> Parse(string statusText)
     {
         if (string.IsNullOrWhiteSpace(statusText))

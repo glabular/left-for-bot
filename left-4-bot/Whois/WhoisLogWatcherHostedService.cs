@@ -7,6 +7,9 @@ using Telegram.Bot;
 
 namespace left_4_bot.Whois;
 
+/// <summary>
+/// Background service that polls server logs and announces new player joins.
+/// </summary>
 public sealed class WhoisLogWatcherHostedService : BackgroundService
 {
     private readonly ServerLogSyncService _logSync;
@@ -29,6 +32,17 @@ public sealed class WhoisLogWatcherHostedService : BackgroundService
     // transition instead of spamming a warning every poll while FTP is down.
     private bool _downloadFailing;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="WhoisLogWatcherHostedService"/> class.
+    /// </summary>
+    /// <param name="logSync">Service used to download active server log files.</param>
+    /// <param name="state">Shared whois enabled state.</param>
+    /// <param name="whoisService">Service used to send whois reports.</param>
+    /// <param name="sessionTracker">Tracker for online and announced players.</param>
+    /// <param name="botSettings">Bot settings, including the group chat ID.</param>
+    /// <param name="bot">Telegram bot client.</param>
+    /// <param name="options">Whois configuration options.</param>
+    /// <param name="logger">Logger for this service.</param>
     public WhoisLogWatcherHostedService(
         ServerLogSyncService logSync,
         WhoisState state,
@@ -49,6 +63,7 @@ public sealed class WhoisLogWatcherHostedService : BackgroundService
         _logger = logger;
     }
 
+    /// <inheritdoc />
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         var intervalSeconds = Math.Max(5, _options.Value.PollIntervalSeconds);
@@ -76,6 +91,10 @@ public sealed class WhoisLogWatcherHostedService : BackgroundService
         }
     }
 
+    /// <summary>
+    /// Performs a single log poll and announces newly entered players when needed.
+    /// </summary>
+    /// <param name="cancellationToken">Token used to cancel the poll.</param>
     private async Task PollOnceAsync(CancellationToken cancellationToken)
     {
         // When whois is off (or there is no group to notify), do not touch FTP at all.
@@ -96,6 +115,7 @@ public sealed class WhoisLogWatcherHostedService : BackgroundService
         }
 
         var download = await _logSync.DownloadActiveLogFilesAsync(cancellationToken);
+
         if (!download.IsSuccess)
         {
             if (!_downloadFailing)
@@ -119,6 +139,7 @@ public sealed class WhoisLogWatcherHostedService : BackgroundService
         foreach (var path in download.LocalFilePaths)
         {
             var activities = ReadNewActivities(path, priming);
+
             if (activities.Count == 0)
             {
                 continue;
@@ -168,6 +189,7 @@ public sealed class WhoisLogWatcherHostedService : BackgroundService
 
         var filtered = _whoisService.ExcludePriorityPlayers(enteredThisTick);
         var toAnnounce = _sessionTracker.FilterUnannouncedPlayers(filtered);
+
         if (toAnnounce.Count == 0)
         {
             return;
@@ -182,6 +204,14 @@ public sealed class WhoisLogWatcherHostedService : BackgroundService
         _sessionTracker.MarkAnnounced(toAnnounce.Select(p => p.ClassicSteamId));
     }
 
+    /// <summary>
+    /// Reads and parses new activity from a log file since the last known offset.
+    /// </summary>
+    /// <param name="filePath">Local path of the log file.</param>
+    /// <param name="priming">
+    /// <see langword="true"/> to seek to EOF without parsing historical lines.
+    /// </param>
+    /// <returns>Parsed activities from the new file slice; empty when priming or unchanged.</returns>
     private IReadOnlyList<WhoisLogActivity> ReadNewActivities(string filePath, bool priming)
     {
         if (!File.Exists(filePath))
@@ -221,6 +251,13 @@ public sealed class WhoisLogWatcherHostedService : BackgroundService
         return WhoisLogActivityParser.Parse(slice);
     }
 
+    /// <summary>
+    /// Reads a UTF-8 byte range from a log file.
+    /// </summary>
+    /// <param name="filePath">Local path of the log file.</param>
+    /// <param name="offset">Start byte offset.</param>
+    /// <param name="length">Current file length used as the exclusive end offset.</param>
+    /// <returns>Decoded text for the requested slice.</returns>
     private static string ReadSlice(string filePath, long offset, long length)
     {
         var count = (int)(length - offset);
@@ -234,13 +271,19 @@ public sealed class WhoisLogWatcherHostedService : BackgroundService
 
         stream.Seek(offset, SeekOrigin.Begin);
         var read = stream.Read(buffer, 0, count);
+
         return Encoding.UTF8.GetString(buffer, 0, read);
     }
 
+    /// <summary>
+    /// Removes offset entries for log files that are no longer active.
+    /// </summary>
+    /// <param name="activePaths">Paths of currently active log files.</param>
     private void PruneOffsets(IReadOnlyList<string> activePaths)
     {
         var active = activePaths.ToHashSet(StringComparer.OrdinalIgnoreCase);
         var stale = _offsets.Keys.Where(path => !active.Contains(path)).ToList();
+
         foreach (var path in stale)
         {
             _offsets.Remove(path);

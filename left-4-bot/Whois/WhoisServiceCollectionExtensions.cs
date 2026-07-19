@@ -3,8 +3,17 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace left_4_bot.Whois;
 
+/// <summary>
+/// Extension methods for registering whois services.
+/// </summary>
 public static class WhoisServiceCollectionExtensions
 {
+    /// <summary>
+    /// Adds whois options, services, and the log watcher hosted service.
+    /// </summary>
+    /// <param name="services">Service collection to configure.</param>
+    /// <param name="configuration">Application configuration.</param>
+    /// <returns>The same <paramref name="services"/> instance for chaining.</returns>
     public static IServiceCollection AddWhois(
         this IServiceCollection services,
         IConfiguration configuration)
