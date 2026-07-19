@@ -1,36 +1,30 @@
-﻿using left_4_bot.ServerLogs;
-using left_4_bot.Storage;
-using Microsoft.Extensions.Configuration;
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Logging;
+﻿using left_4_bot.Storage;
 
 namespace left_4_bot.Console;
 
 public sealed class BotConsoleApp
 {
     private readonly UserSecretsSettingsStore _store;
-    private readonly string _userSecretsId;
 
-    public BotConsoleApp(UserSecretsSettingsStore store, string userSecretsId)
+    public BotConsoleApp(UserSecretsSettingsStore store)
     {
         _store = store;
-        _userSecretsId = userSecretsId;
     }
 
-    public async Task<ConsoleAction> RunAsync()
+    public ConsoleAction Run()
     {
         while (true)
         {
             if (!_store.HasBotToken())
             {
-                if (!await ShowNoTokenMenuAsync())
+                if (!ShowNoTokenMenu())
                 {
                     continue;
                 }
             }
             else
             {
-                var action = await ShowMainMenuAsync();
+                var action = ShowMainMenu();
                 if (action != null)
                 {
                     return action.Value;
@@ -39,21 +33,17 @@ public sealed class BotConsoleApp
         }
     }
 
-    private async Task<bool> ShowNoTokenMenuAsync()
+    private bool ShowNoTokenMenu()
     {
         System.Console.WriteLine();
         System.Console.WriteLine("No bot token configured.");
         System.Console.WriteLine("1) Set bot token");
-        System.Console.WriteLine("4) Download latest server log");
         System.Console.WriteLine("0) Exit");
 
         switch (System.Console.ReadLine()?.Trim())
         {
             case "1":
                 PromptAndSaveBotToken();
-                return false;
-            case "4":
-                await DownloadLatestServerLogAsync();
                 return false;
             case "0":
                 Environment.Exit(0);
@@ -64,7 +54,7 @@ public sealed class BotConsoleApp
         }
     }
 
-    private async Task<ConsoleAction?> ShowMainMenuAsync()
+    private ConsoleAction? ShowMainMenu()
     {
         var settings = _store.Load();
 
@@ -77,8 +67,7 @@ public sealed class BotConsoleApp
         System.Console.WriteLine("1) Start bot");
         System.Console.WriteLine("2) Change bot token");
         System.Console.WriteLine("3) Set group chat ID (0 = discovery mode)");
-        System.Console.WriteLine("4) Download latest server log");
-        System.Console.WriteLine("5) Set Steam Web API key");
+        System.Console.WriteLine("4) Set Steam Web API key");
         System.Console.WriteLine("0) Exit");
 
         return System.Console.ReadLine()?.Trim() switch
@@ -86,39 +75,10 @@ public sealed class BotConsoleApp
             "1" => ConsoleAction.StartBot,
             "2" => PromptAndSaveBotTokenAndContinue(),
             "3" => PromptAndSaveGroupChatIdAndContinue(),
-            "4" => await DownloadLatestServerLogAndContinueAsync(),
-            "5" => PromptAndSaveSteamWebApiKeyAndContinue(),
+            "4" => PromptAndSaveSteamWebApiKeyAndContinue(),
             "0" => ConsoleAction.Exit,
             _ => InvalidChoice()
         };
-    }
-
-    private async Task<ConsoleAction?> DownloadLatestServerLogAndContinueAsync()
-    {
-        await DownloadLatestServerLogAsync();
-        return null;
-    }
-
-    private async Task DownloadLatestServerLogAsync()
-    {
-        var configuration = new ConfigurationBuilder()
-            .AddUserSecrets(_userSecretsId)
-            .Build();
-
-        var services = new ServiceCollection();
-        services.AddLogging(builder => builder.AddConsole());
-        services.AddServerLogSync(configuration);
-
-        await using var provider = services.BuildServiceProvider(new ServiceProviderOptions
-        {
-            ValidateOnBuild = true,
-        });
-
-        var sync = provider.GetRequiredService<ServerLogSyncService>();
-        var result = await sync.DownloadLatestLogAsync(CancellationToken.None);
-
-        System.Console.WriteLine();
-        System.Console.WriteLine(result.Message);
     }
 
     private ConsoleAction? PromptAndSaveBotTokenAndContinue()

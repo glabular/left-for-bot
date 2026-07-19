@@ -279,21 +279,6 @@ public sealed class ServerLogSyncService
         }
     }
 
-    public async Task<ServerLogSyncResult> DownloadLatestLogAsync(CancellationToken cancellationToken)
-    {
-        var download = await DownloadTodayLogFilesAsync(cancellationToken);
-
-        if (!download.IsSuccess)
-        {
-            return ServerLogSyncResult.Failed(download.Message);
-        }
-
-        return ServerLogSyncResult.Succeeded(
-            ResolveLocalInboxDirectory(),
-            string.Join(", ", download.LocalFilePaths.Select(Path.GetFileName)),
-            download.Message);
-    }
-
     private async Task DownloadFileWithRetryAsync(
         IFtpSession session,
         string remotePath,
