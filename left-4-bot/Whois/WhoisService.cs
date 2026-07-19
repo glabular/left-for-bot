@@ -54,12 +54,20 @@ public sealed class WhoisService
             .Where(id => !string.IsNullOrWhiteSpace(id))
             .ToHashSet(StringComparer.Ordinal);
 
-        return players
-            .Where(p => !priority.Contains(p.ClassicSteamId))
+        return DeduplicatePlayers(
+            players.Where(p => !priority.Contains(p.ClassicSteamId)));
+    }
+
+    /// <summary>
+    /// Removes duplicate players by classic Steam ID, keeping the first occurrence of each.
+    /// </summary>
+    /// <param name="players">Players to deduplicate.</param>
+    /// <returns>Unique players by <see cref="WhoisPlayerRef.ClassicSteamId"/>.</returns>
+    public static IReadOnlyList<WhoisPlayerRef> DeduplicatePlayers(IEnumerable<WhoisPlayerRef> players) =>
+        players
             .GroupBy(p => p.ClassicSteamId, StringComparer.Ordinal)
             .Select(g => g.First())
             .ToList();
-    }
 
     /// <summary>
     /// Sends an HTML whois report for the given players to a Telegram chat.
@@ -68,11 +76,16 @@ public sealed class WhoisService
     /// <param name="chatId">Target chat identifier.</param>
     /// <param name="players">Players to include in the report.</param>
     /// <param name="cancellationToken">Token used to cancel the operation.</param>
+    /// <param name="includePriorityPlayers">
+    /// When <see langword="true"/>, priority players are included (manual <c>/whois now</c>).
+    /// When <see langword="false"/> (default), they are excluded (automatic join checks).
+    /// </param>
     public async Task SendWhoisReportAsync(
         ITelegramBotClient bot,
         long chatId,
         IReadOnlyList<WhoisPlayerRef> players,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        bool includePriorityPlayers = false)
     {
         if (!HasApiKey)
         {
@@ -85,13 +98,19 @@ public sealed class WhoisService
             return;
         }
 
-        var filtered = ExcludePriorityPlayers(players);
+        var filtered = includePriorityPlayers
+            ? DeduplicatePlayers(players)
+            : ExcludePriorityPlayers(players);
 
         if (filtered.Count == 0)
         {
+            var emptyMessage = includePriorityPlayers
+                ? "Нет игроков для проверки (сервер пуст)."
+                : "Нет игроков для проверки (сервер пуст или на сервере только свои).";
+
             await bot.SendMessage(
                 chatId,
-                "Нет игроков для проверки (сервер пуст или на сервере только свои).",
+                emptyMessage,
                 cancellationToken: cancellationToken);
 
             return;

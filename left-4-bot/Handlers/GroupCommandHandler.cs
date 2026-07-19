@@ -41,8 +41,8 @@ public sealed class GroupCommandHandler
         🔎 <b>Проверка игроков</b>
         /whois — включить или выключить автопроверку.
         /whois on | /whois off — явно включить или выключить.
-        При включении бот автоматически пишет в чат о новых игроках, их часах в игре и наличии VAC-блокировок.
-        /whois now — проверить всех, кто сейчас на сервере.
+        При включении бот автоматически пишет в чат о новых игроках, их часах в игре и наличии VAC-блокировок (приоритетные игроки пропускаются).
+        /whois now — проверить всех, кто сейчас на сервере, включая приоритетных игроков.
         /whois status — показать, включена ли сейчас автопроверка.
 
         🕵️‍♂️ <b>Шпион</b>
@@ -62,7 +62,7 @@ public sealed class GroupCommandHandler
             /whois — включить или выключить автопроверку
             /whois on — включить
             /whois off — выключить
-            /whois now — проверить игроков, которые сейчас на сервере
+            /whois now — проверить всех на сервере, включая приоритетных игроков
             /whois status — показать текущий статус автопроверки
         """;
 
@@ -853,8 +853,10 @@ public sealed class GroupCommandHandler
             bot,
             message.Chat.Id,
             players,
-            cancellationToken);
+            cancellationToken,
+            includePriorityPlayers: true);
 
+        // Auto-check never announces priority players, so only mark non-priority as announced.
         var announced = _whoisService.ExcludePriorityPlayers(players);
         _whoisSessionTracker.MarkAnnounced(announced.Select(p => p.ClassicSteamId));
     }
