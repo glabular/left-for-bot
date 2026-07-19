@@ -19,14 +19,4 @@ public sealed class WhoisOptions
     /// Gets or sets the log poll interval in seconds.
     /// </summary>
     public int PollIntervalSeconds { get; set; } = 15;
-
-    /// <summary>
-    /// Gets or sets the Steam AppID for Left 4 Dead 2.
-    /// </summary>
-    public int L4d2AppId { get; set; } = 550;
-
-    /// <summary>
-    /// Gets or sets the Steam AppID for Left 4 Dead.
-    /// </summary>
-    public int L4d1AppId { get; set; } = 500;
 }

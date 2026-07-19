@@ -198,7 +198,7 @@ public sealed class SteamPlayerProfileService
             {
                 steamid = steam64.ToString(CultureInfo.InvariantCulture),
                 include_played_free_games = true,
-                appids_filter = new[] { _options.L4d2AppId, _options.L4d1AppId },
+                appids_filter = new[] { SteamAppIds.Left4Dead2, SteamAppIds.Left4Dead },
             });
 
             var url = "https://api.steampowered.com/IPlayerService/GetOwnedGames/v1/"
@@ -244,12 +244,12 @@ public sealed class SteamPlayerProfileService
                     ? playtimeElement.GetInt32()
                     : 0;
 
-                if (appId == _options.L4d2AppId)
+                if (appId == SteamAppIds.Left4Dead2)
                 {
                     l4d2Minutes = minutes;
                     foundL4d2 = true;
                 }
-                else if (appId == _options.L4d1AppId)
+                else if (appId == SteamAppIds.Left4Dead)
                 {
                     l4d1Minutes = minutes;
                     foundL4d1 = true;
