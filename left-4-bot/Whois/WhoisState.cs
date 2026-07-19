@@ -5,7 +5,7 @@ namespace left_4_bot.Whois;
 /// </summary>
 public sealed class WhoisState
 {
-    private readonly object _gate = new();
+    private readonly Lock _gate = new();
     private bool _enabled;
 
     /// <summary>
@@ -31,6 +31,7 @@ public sealed class WhoisState
         lock (_gate)
         {
             _enabled = !_enabled;
+
             return _enabled;
         }
     }
