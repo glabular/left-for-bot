@@ -18,10 +18,9 @@ public sealed class GroupCommandHandler
 
         🗺️ <b>Карты</b>
         /map — случайная карта из любимых.
-        /randommap — случайная карта из всех.
+        /map random | /map r — случайная карта из всех официальных.
         /favmaps — список любимых карт.
-        /addmap &lt;англ.&gt; — добавить в любимые.
-        /removemap &lt;англ.&gt; — удалить из любимых.
+        /favmaps &lt;англ.&gt; — добавить или удалить карту из любимых.
         Названия кампаний — на английском (например: Dark Carnival).
 
         📣 <b>Созыв игроков</b>
@@ -90,8 +89,15 @@ public sealed class GroupCommandHandler
         $"Превышен дневной лимит изменений золотого пула ({GoldenPoolEditLimiter.DailyLimit} в день). "
         + "Слишком много правок списка сегодня — попробуйте завтра.";
 
+    private const string MapUsageText =
+        """
+        Использование:
+            /map — случайная карта из любимых
+            /map random | /map r — случайная карта из всех официальных
+        """;
+
     private const string EmptyPoolText =
-        "Золотой пул пуст.\n\nИспользуйте /addmap <название на английском>\n\nНапример:\n    /addmap Dark Carnival";
+        "Золотой пул пуст.\n\nИспользуйте /favmaps <название на английском>\n\nНапример:\n    /favmaps Dark Carnival";
 
     private const string EmptyCallListText =
         """
@@ -184,23 +190,11 @@ public sealed class GroupCommandHandler
         switch (command.ToLowerInvariant())
         {
             case "map":
-                await HandleRandomGoldenMapAsync(bot, message, cancellationToken);
-                break;
-
-            case "addmap":
-                await HandleAddMapAsync(bot, message, args, cancellationToken);
-                break;
-
-            case "removemap":
-                await HandleRemoveMapAsync(bot, message, args, cancellationToken);
-                break;
-
-            case "randommap":
-                await HandleRandomMapAsync(bot, message, cancellationToken);
+                await HandleMapAsync(bot, message, args, cancellationToken);
                 break;
 
             case "favmaps":
-                await HandleFavMapsAsync(bot, message, cancellationToken);
+                await HandleFavMapsAsync(bot, message, args, cancellationToken);
                 break;
 
             case "call":
@@ -395,25 +389,81 @@ public sealed class GroupCommandHandler
         return $"<a href=\"tg://user?id={id}\">{name}</a>";
     }
 
-    private async Task HandleRandomGoldenMapAsync(
+    private async Task HandleMapAsync(
         ITelegramBotClient bot,
         Message message,
+        string args,
         CancellationToken cancellationToken)
     {
-        var campaign = RandomCampaignPicker.PickFrom(_goldenPool.GetCampaigns());
+        if (string.IsNullOrWhiteSpace(args))
+        {
+            var favorite = RandomCampaignPicker.PickFrom(_goldenPool.GetCampaigns());
 
-        var text = campaign is null
-            ? EmptyPoolText
-            : campaign.Value.DisplayName;
+            var favoriteText = favorite is null
+                ? EmptyPoolText
+                : favorite.Value.DisplayName;
 
-        await bot.SendMessage(message.Chat.Id, text, cancellationToken: cancellationToken);
+            await bot.SendMessage(message.Chat.Id, favoriteText, cancellationToken: cancellationToken);
+            
+            return;
+        }
+
+        var firstToken = args.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries)[0];
+
+        if (firstToken.Equals("random", StringComparison.OrdinalIgnoreCase)
+            || firstToken.Equals("r", StringComparison.OrdinalIgnoreCase))
+        {
+            var campaign = RandomCampaignPicker.Pick();
+
+            await bot.SendMessage(
+                message.Chat.Id,
+                campaign.DisplayName,
+                cancellationToken: cancellationToken);
+
+            return;
+        }
+
+        await bot.SendMessage(message.Chat.Id, MapUsageText, cancellationToken: cancellationToken);
     }
 
     private async Task HandleFavMapsAsync(
         ITelegramBotClient bot,
         Message message,
+        string args,
         CancellationToken cancellationToken)
     {
+        if (!string.IsNullOrWhiteSpace(args))
+        {
+            var (allowed, result) = await TryEditGoldenPoolWithDailyLimitAsync(
+                bot,
+                message,
+                () => _goldenPool.TryToggle(args),
+                r => r is GoldenPoolToggleResult.Added or GoldenPoolToggleResult.Removed,
+                cancellationToken);
+
+            if (!allowed)
+            {
+                return;
+            }
+
+            var text = result switch
+            {
+                GoldenPoolToggleResult.Added when CampaignCatalog.TryGetByEnglishName(args, out var c)
+                    => $"Добавлено в золотой пул: {c.DisplayName}",
+                GoldenPoolToggleResult.Removed when CampaignCatalog.TryGetByEnglishName(args, out var c)
+                    => $"Удалено из золотого пула: {c.DisplayName}",
+                GoldenPoolToggleResult.UnknownCampaign
+                    => $"Неизвестная кампания: {args}",
+                GoldenPoolToggleResult.SaveFailed
+                    => "Не удалось сохранить золотой пул в appsettings.Local.json.",
+                _ => "Не удалось изменить золотой пул."
+            };
+
+            await bot.SendMessage(message.Chat.Id, text, cancellationToken: cancellationToken);
+
+            return;
+        }
+
         var campaigns = _goldenPool.GetCampaigns();
 
         if (campaigns.Count == 0)
@@ -435,105 +485,6 @@ public sealed class GroupCommandHandler
         await bot.SendMessage(
             message.Chat.Id,
             string.Join('\n', lines),
-            cancellationToken: cancellationToken);
-    }
-
-    private async Task HandleAddMapAsync(
-        ITelegramBotClient bot,
-        Message message,
-        string args,
-        CancellationToken cancellationToken)
-    {
-        if (string.IsNullOrWhiteSpace(args))
-        {
-            await bot.SendMessage(
-                message.Chat.Id,
-                "Использование: /addmap <название на английском>\n\nНапример:\n    /addmap Dark Carnival",
-                cancellationToken: cancellationToken);
-            return;
-        }
-
-        var (allowed, result) = await TryEditGoldenPoolWithDailyLimitAsync(
-            bot,
-            message,
-            () => _goldenPool.TryAdd(args),
-            r => r == AddResult.Added,
-            cancellationToken);
-
-        if (!allowed)
-        {
-            return;
-        }
-
-        var text = result switch
-        {
-            AddResult.Added when CampaignCatalog.TryGetByEnglishName(args, out var c)
-                => $"Добавлено в золотой пул: {c.DisplayName}",
-            AddResult.AlreadyExists when CampaignCatalog.TryGetByEnglishName(args, out var c)
-                => $"Уже в золотом пуле: {c.DisplayName}",
-            AddResult.UnknownCampaign
-                => $"Неизвестная кампания: {args}",
-            AddResult.SaveFailed
-                => "Не удалось сохранить золотой пул в appsettings.Local.json.",
-            _ => "Не удалось добавить кампанию."
-        };
-
-        await bot.SendMessage(message.Chat.Id, text, cancellationToken: cancellationToken);
-    }
-
-    private async Task HandleRemoveMapAsync(
-        ITelegramBotClient bot,
-        Message message,
-        string args,
-        CancellationToken cancellationToken)
-    {
-        if (string.IsNullOrWhiteSpace(args))
-        {
-            await bot.SendMessage(
-                message.Chat.Id,
-                "Использование: /removemap <название на английском>\n\nНапример:\n    /removemap Dark Carnival",
-                cancellationToken: cancellationToken);
-            return;
-        }
-
-        var (allowed, result) = await TryEditGoldenPoolWithDailyLimitAsync(
-            bot,
-            message,
-            () => _goldenPool.TryRemove(args),
-            r => r == RemoveResult.Removed,
-            cancellationToken);
-
-        if (!allowed)
-        {
-            return;
-        }
-
-        var text = result switch
-        {
-            RemoveResult.Removed when CampaignCatalog.TryGetByEnglishName(args, out var c)
-                => $"Удалено из золотого пула: {c.DisplayName}",
-            RemoveResult.NotInPool when CampaignCatalog.TryGetByEnglishName(args, out var c)
-                => $"Нет в золотом пуле: {c.DisplayName}",
-            RemoveResult.UnknownCampaign
-                => $"Неизвестная кампания: {args}",
-            RemoveResult.SaveFailed
-                => "Не удалось сохранить золотой пул в appsettings.Local.json.",
-            _ => "Не удалось удалить кампанию."
-        };
-
-        await bot.SendMessage(message.Chat.Id, text, cancellationToken: cancellationToken);
-    }
-
-    private static async Task HandleRandomMapAsync(
-        ITelegramBotClient bot,
-        Message message,
-        CancellationToken cancellationToken)
-    {
-        var campaign = RandomCampaignPicker.Pick();
-
-        await bot.SendMessage(
-            message.Chat.Id,
-            campaign.DisplayName,
             cancellationToken: cancellationToken);
     }
 

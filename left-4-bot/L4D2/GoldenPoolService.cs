@@ -56,18 +56,30 @@ public sealed class GoldenPoolService
         }
     }
 
-    public AddResult TryAdd(string englishName)
+    public GoldenPoolToggleResult TryToggle(string englishName)
     {
         lock (_sync)
         {
             if (!CampaignCatalog.TryGetByEnglishName(englishName, out var campaign))
             {
-                return AddResult.UnknownCampaign;
+                return GoldenPoolToggleResult.UnknownCampaign;
             }
 
-            if (Contains(campaign.EnglishName))
+            var index = _campaignNames.FindIndex(
+                n => n.Equals(campaign.EnglishName, StringComparison.OrdinalIgnoreCase));
+
+            if (index >= 0)
             {
-                return AddResult.AlreadyExists;
+                var removedName = _campaignNames[index];
+                _campaignNames.RemoveAt(index);
+
+                if (!TrySave())
+                {
+                    _campaignNames.Insert(index, removedName);
+                    return GoldenPoolToggleResult.SaveFailed;
+                }
+
+                return GoldenPoolToggleResult.Removed;
             }
 
             _campaignNames.Add(campaign.EnglishName);
@@ -75,40 +87,10 @@ public sealed class GoldenPoolService
             if (!TrySave())
             {
                 _campaignNames.RemoveAt(_campaignNames.Count - 1);
-                return AddResult.SaveFailed;
+                return GoldenPoolToggleResult.SaveFailed;
             }
 
-            return AddResult.Added;
-        }
-    }
-
-    public RemoveResult TryRemove(string englishName)
-    {
-        lock (_sync)
-        {
-            if (!CampaignCatalog.TryGetByEnglishName(englishName, out var campaign))
-            {
-                return RemoveResult.UnknownCampaign;
-            }
-
-            var index = _campaignNames.FindIndex(
-                n => n.Equals(campaign.EnglishName, StringComparison.OrdinalIgnoreCase));
-
-            if (index < 0)
-            {
-                return RemoveResult.NotInPool;
-            }
-
-            var removedName = _campaignNames[index];
-            _campaignNames.RemoveAt(index);
-
-            if (!TrySave())
-            {
-                _campaignNames.Insert(index, removedName);
-                return RemoveResult.SaveFailed;
-            }
-
-            return RemoveResult.Removed;
+            return GoldenPoolToggleResult.Added;
         }
     }
 
