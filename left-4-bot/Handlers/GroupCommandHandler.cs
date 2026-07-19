@@ -40,6 +40,7 @@ public sealed class GroupCommandHandler
 
         🔎 <b>Проверка игроков</b>
         /whois — включить или выключить автопроверку.
+        /whois on | /whois off — явно включить или выключить.
         При включении бот автоматически пишет в чат о новых игроках, их часах в игре и наличии VAC-блокировок.
         /whois now — проверить всех, кто сейчас на сервере.
         /whois status — показать, включена ли сейчас автопроверка.
@@ -59,6 +60,8 @@ public sealed class GroupCommandHandler
         """
         Использование:
             /whois — включить или выключить автопроверку
+            /whois on — включить
+            /whois off — выключить
             /whois now — проверить игроков, которые сейчас на сервере
             /whois status — показать текущий статус автопроверки
         """;
@@ -692,6 +695,35 @@ public sealed class GroupCommandHandler
         if (trimmed.Equals("now", StringComparison.OrdinalIgnoreCase))
         {
             await HandleWhoisNowAsync(bot, message, cancellationToken);
+            return;
+        }
+
+        if (trimmed.Equals("on", StringComparison.OrdinalIgnoreCase))
+        {
+            if (!_whoisService.HasApiKey)
+            {
+                await bot.SendMessage(
+                    message.Chat.Id,
+                    WhoisService.MissingApiKeyMessage,
+                    cancellationToken: cancellationToken);
+                return;
+            }
+
+            _whoisState.Set(true);
+            await bot.SendMessage(
+                message.Chat.Id,
+                "Проверка игроков включена.\nБот будет писать в группу при подключении новых игроков.",
+                cancellationToken: cancellationToken);
+            return;
+        }
+
+        if (trimmed.Equals("off", StringComparison.OrdinalIgnoreCase))
+        {
+            _whoisState.Set(false);
+            await bot.SendMessage(
+                message.Chat.Id,
+                "Проверка игроков выключена.",
+                cancellationToken: cancellationToken);
             return;
         }
 

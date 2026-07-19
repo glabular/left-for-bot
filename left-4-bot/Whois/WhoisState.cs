@@ -35,4 +35,19 @@ public sealed class WhoisState
             return _enabled;
         }
     }
+
+    /// <summary>
+    /// Sets automatic whois checks on or off.
+    /// </summary>
+    /// <param name="enabled"><see langword="true"/> to enable; <see langword="false"/> to disable.</param>
+    /// <returns>The resulting enabled state.</returns>
+    public bool Set(bool enabled)
+    {
+        lock (_gate)
+        {
+            _enabled = enabled;
+
+            return _enabled;
+        }
+    }
 }
