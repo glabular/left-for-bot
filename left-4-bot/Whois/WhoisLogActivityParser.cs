@@ -4,29 +4,6 @@ using left_4_bot.ServerLogs;
 namespace left_4_bot.Whois;
 
 /// <summary>
-/// Kind of player activity parsed from a server log line.
-/// </summary>
-internal enum WhoisLogActivityKind
-{
-    /// <summary>
-    /// Player entered the game.
-    /// </summary>
-    Entered,
-
-    /// <summary>
-    /// Player disconnected from the server.
-    /// </summary>
-    Disconnected,
-}
-
-/// <summary>
-/// A player activity event extracted from server logs.
-/// </summary>
-/// <param name="Kind">Activity kind.</param>
-/// <param name="Player">Player associated with the activity.</param>
-internal sealed record WhoisLogActivity(WhoisLogActivityKind Kind, WhoisPlayerRef Player);
-
-/// <summary>
 /// Parses enter and disconnect lines from server log slices.
 /// </summary>
 internal static partial class WhoisLogActivityParser
