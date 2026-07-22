@@ -1,5 +1,6 @@
 ﻿using left_4_bot.Call;
 using left_4_bot.L4D2;
+using left_4_bot.Persistence;
 using left_4_bot.Rcon;
 using left_4_bot.ServerLogs;
 using left_4_bot.Spy;
@@ -52,6 +53,9 @@ public sealed class GroupCommandHandler
         Пересылается только командный чат; сообщения приоритетных игроков игнорируются.
         В начале игрового дня шпион сам выключается.
 
+        🔗 <b>Привязка Steam</b>
+        /link &lt;ссылка на профиль Steam&gt; — связать Telegram с Steam.
+
         ℹ️ <b>Справка</b>
         /help — эта справка.
         """;
@@ -76,6 +80,16 @@ public sealed class GroupCommandHandler
 
         Бот пересылает только командный чат (не общий).
         Сообщения приоритетных игроков не показываются.
+        """;
+
+    private const string LinkUsageText =
+        """
+        Использование:
+            /link <ссылка на профиль Steam>
+
+        Примеры:
+            /link https://steamcommunity.com/profiles/76561198000000000
+            /link https://steamcommunity.com/id/yourname
         """;
 
     private const string ServerSetupText =
@@ -158,6 +172,8 @@ public sealed class GroupCommandHandler
     private readonly WhoisService _whoisService;
     private readonly WhoisSessionTracker _whoisSessionTracker;
     private readonly SpyState _spyState;
+    private readonly PlayersService _playersService;
+    private readonly SteamPlayerProfileService _steamProfiles;
 
     public GroupCommandHandler(
         GoldenPoolService goldenPool,
@@ -169,7 +185,9 @@ public sealed class GroupCommandHandler
         WhoisState whoisState,
         WhoisService whoisService,
         WhoisSessionTracker whoisSessionTracker,
-        SpyState spyState)
+        SpyState spyState,
+        PlayersService playersService,
+        SteamPlayerProfileService steamProfiles)
     {
         _goldenPool = goldenPool;
         _editLimiter = editLimiter;
@@ -181,6 +199,8 @@ public sealed class GroupCommandHandler
         _whoisService = whoisService;
         _whoisSessionTracker = whoisSessionTracker;
         _spyState = spyState;
+        _playersService = playersService;
+        _steamProfiles = steamProfiles;
     }
 
     public async Task HandleAsync(
@@ -230,6 +250,9 @@ public sealed class GroupCommandHandler
 
             case "spy":
                 await HandleSpyAsync(bot, message, args, cancellationToken);
+                break;
+            case "link":
+                await HandleLinkAsync(bot, message, args, cancellationToken);
                 break;
 
             default:
@@ -881,6 +904,108 @@ public sealed class GroupCommandHandler
         await bot.SendMessage(
             message.Chat.Id,
             ServerSetupText,
+            parseMode: ParseMode.Html,
+            cancellationToken: cancellationToken);
+    }
+
+    private async Task HandleLinkAsync(
+        ITelegramBotClient bot,
+        Message message,
+        string args,
+        CancellationToken cancellationToken)
+    {
+        if (message.From is null)
+        {
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(args))
+        {
+            await bot.SendMessage(
+                message.Chat.Id,
+                LinkUsageText,
+                linkPreviewOptions: new LinkPreviewOptions { IsDisabled = true },
+                cancellationToken: cancellationToken);
+            return;
+        }
+
+        var parsed = SteamProfileLinkParser.Parse(args);
+        ulong? steam64 = null;
+
+        switch (parsed)
+        {
+            case SteamLinkParseFailed failed:
+                await bot.SendMessage(
+                    message.Chat.Id,
+                    failed.ErrorMessage,
+                    linkPreviewOptions: new LinkPreviewOptions { IsDisabled = true },
+                    cancellationToken: cancellationToken);
+                return;
+
+            case SteamLinkParsedSteam64 direct:
+                steam64 = direct.Steam64;
+                break;
+
+            case SteamLinkParsedVanity vanity:
+                if (!_steamProfiles.HasApiKey)
+                {
+                    await bot.SendMessage(
+                        message.Chat.Id,
+                        WhoisService.MissingApiKeyMessage,
+                        cancellationToken: cancellationToken);
+                    return;
+                }
+
+                steam64 = await _steamProfiles.ResolveVanityAsync(vanity.Vanity, cancellationToken);
+
+                if (steam64 is null)
+                {
+                    await bot.SendMessage(
+                        message.Chat.Id,
+                        "Не удалось найти Steam-профиль по этой ссылке /id/… Проверь адрес или используй ссылку вида /profiles/7656119…",
+                        cancellationToken: cancellationToken);
+                    return;
+                }
+
+                break;
+        }
+
+        if (steam64 is null
+            || !SteamIdConverter.TryFromSteam64(steam64.Value, out var classicSteamId))
+        {
+            await bot.SendMessage(
+                message.Chat.Id,
+                "Не удалось разобрать Steam ID из ссылки.",
+                cancellationToken: cancellationToken);
+            return;
+        }
+
+        var displayName = message.From.Username is { } username
+            ? $"@{username}"
+            : message.From.FirstName;
+
+        var result = await _playersService.LinkAsync(
+            message.From.Id,
+            displayName,
+            classicSteamId,
+            cancellationToken);
+
+        var reply = result.Status switch
+        {
+            LinkPlayerStatus.Linked =>
+                $"Готово. Telegram связан со Steam.\nSteam: <code>{classicSteamId}</code>",
+            LinkPlayerStatus.AlreadyLinked =>
+                $"Уже связано.\nSteam: <code>{classicSteamId}</code>",
+            LinkPlayerStatus.TelegramBoundToOtherSteam =>
+                $"Этот Telegram уже привязан к другому Steam:\n<code>{result.Player?.SteamId}</code>",
+            LinkPlayerStatus.SteamBoundToOtherTelegram =>
+                "Этот Steam уже привязан к другому Telegram-аккаунту.",
+            _ => "Не удалось выполнить привязку.",
+        };
+
+        await bot.SendMessage(
+            message.Chat.Id,
+            reply,
             parseMode: ParseMode.Html,
             cancellationToken: cancellationToken);
     }

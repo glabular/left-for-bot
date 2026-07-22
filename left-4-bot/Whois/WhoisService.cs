@@ -1,7 +1,8 @@
-using System.Text;
+using left_4_bot.Persistence;
 using left_4_bot.ServerLogs;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using System.Text;
 using Telegram.Bot;
 using Telegram.Bot.Types.Enums;
 
@@ -19,22 +20,22 @@ public sealed class WhoisService
         "Steam API ключ не настроен. Задайте его в меню бота.";
 
     private readonly SteamPlayerProfileService _steamProfiles;
-    private readonly IOptions<PriorityPlayersOptions> _priorityPlayers;
+    private readonly PlayersService _playersService;
     private readonly ILogger<WhoisService> _logger;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="WhoisService"/> class.
     /// </summary>
     /// <param name="steamProfiles">Service used to load Steam profile data.</param>
-    /// <param name="priorityPlayers">Priority players excluded from reports.</param>
+    /// <param name="playersService">Service used to load player data from the database.</param>
     /// <param name="logger">Logger for this service.</param>
     public WhoisService(
         SteamPlayerProfileService steamProfiles,
-        IOptions<PriorityPlayersOptions> priorityPlayers,
+        PlayersService playersService,
         ILogger<WhoisService> logger)
     {
         _steamProfiles = steamProfiles;
-        _priorityPlayers = priorityPlayers;
+        _playersService = playersService;
         _logger = logger;
     }
 
@@ -50,9 +51,7 @@ public sealed class WhoisService
     /// <returns>Filtered unique non-priority players.</returns>
     public IReadOnlyList<WhoisPlayerRef> ExcludePriorityPlayers(IEnumerable<WhoisPlayerRef> players)
     {
-        var priority = _priorityPlayers.Value.SteamIds
-            .Where(id => !string.IsNullOrWhiteSpace(id))
-            .ToHashSet(StringComparer.Ordinal);
+        var priority = _playersService.GetPrioritySteamIds();
 
         return DeduplicatePlayers(
             players.Where(p => !priority.Contains(p.ClassicSteamId)));
