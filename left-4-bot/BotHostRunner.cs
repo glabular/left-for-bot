@@ -63,7 +63,7 @@ public static class BotHostRunner
         {
             var dbFactory = scope.ServiceProvider.GetRequiredService<IDbContextFactory<BotDbContext>>();
             await using var db = await dbFactory.CreateDbContextAsync();
-            await db.Database.EnsureCreatedAsync();
+            await db.Database.MigrateAsync();
         }
 
         await host.RunAsync();

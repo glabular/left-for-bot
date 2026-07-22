@@ -56,6 +56,9 @@ public sealed class GroupCommandHandler
         🔗 <b>Привязка Steam</b>
         /link &lt;ссылка на профиль Steam&gt; — связать Telegram с Steam.
 
+        ⚠️ <b>Тотализатор (в разработке)</b>
+        /balance — баланс таблов.
+
         ℹ️ <b>Справка</b>
         /help — эта справка.
         """;
@@ -253,6 +256,10 @@ public sealed class GroupCommandHandler
                 break;
             case "link":
                 await HandleLinkAsync(bot, message, args, cancellationToken);
+                break;
+
+            case "balance":
+                await HandleBalanceAsync(bot, message, cancellationToken);
                 break;
 
             default:
@@ -904,6 +911,54 @@ public sealed class GroupCommandHandler
         await bot.SendMessage(
             message.Chat.Id,
             ServerSetupText,
+            parseMode: ParseMode.Html,
+            cancellationToken: cancellationToken);
+    }
+
+    private async Task HandleBalanceAsync(
+        ITelegramBotClient bot,
+        Message message,
+        CancellationToken cancellationToken)
+    {
+        if (message.From is null)
+        {
+            return;
+        }
+
+        var result = await _playersService.GetOrClaimStarterBalanceAsync(
+            message.From.Id,
+            cancellationToken);
+
+        var reply = result.Status switch
+        {
+            BalanceClaimStatus.NeedLink =>
+                """
+                ⚠️ Тотализатор в разработке
+
+                Сначала привяжи Steam:
+                    /link &lt;ссылка на профиль Steam&gt;
+                """,
+            BalanceClaimStatus.Joined =>
+                $"""
+                ⚠️ Тотализатор в разработке
+
+                🎉 Поздравляем! 🎉
+
+                На счёт зачислено {PlayersService.StarterTabs} таблов 💊 💊 💊 
+                💰 Текущий баланс: {result.Balance} таблов.
+                """,
+            BalanceClaimStatus.AlreadyJoined =>
+                $"""
+                ⚠️ Тотализатор в разработке
+
+                💰 Твой текущий баланс: {result.Balance} таблов.
+                """,
+            _ => "⚠️ Тотализатор в разработке\n\nНе удалось получить баланс.",
+        };
+
+        await bot.SendMessage(
+            message.Chat.Id,
+            reply,
             parseMode: ParseMode.Html,
             cancellationToken: cancellationToken);
     }

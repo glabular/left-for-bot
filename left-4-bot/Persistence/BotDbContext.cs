@@ -20,5 +20,6 @@ public sealed class BotDbContext : DbContext
         player.HasIndex(p => p.TelegramUserId).IsUnique();
         player.Property(p => p.SteamId).HasMaxLength(32).IsRequired();
         player.Property(p => p.TelegramUsername).HasMaxLength(128);
+        player.Property(p => p.Balance).HasDefaultValue(0);
     }
 }

@@ -4,6 +4,8 @@ namespace left_4_bot.Persistence;
 
 public sealed class PlayersService
 {
+    public const int StarterTabs = 1000;
+
     private readonly IDbContextFactory<BotDbContext> _dbFactory;
 
     public PlayersService(IDbContextFactory<BotDbContext> dbFactory)
@@ -97,5 +99,40 @@ public sealed class PlayersService
         await db.SaveChangesAsync(cancellationToken);
 
         return new LinkPlayerResult(LinkPlayerStatus.Linked, player);
+    }
+
+    /// <summary>
+    /// Shows balance or grants the one-time starter tabs for a linked Telegram user.
+    /// </summary>
+    public async Task<BalanceClaimResult> GetOrClaimStarterBalanceAsync(
+        long telegramUserId,
+        CancellationToken cancellationToken)
+    {
+        await using var db = await _dbFactory.CreateDbContextAsync(cancellationToken);
+
+        var player = await db.Players
+            .FirstOrDefaultAsync(p => p.TelegramUserId == telegramUserId, cancellationToken);
+
+        if (player is null)
+        {
+            return new BalanceClaimResult(BalanceClaimStatus.NeedLink, Balance: 0, SteamId: null);
+        }
+
+        if (player.StarterGrantedAt is not null)
+        {
+            return new BalanceClaimResult(
+                BalanceClaimStatus.AlreadyJoined,
+                player.Balance,
+                player.SteamId);
+        }
+
+        player.Balance = StarterTabs;
+        player.StarterGrantedAt = DateTimeOffset.UtcNow;
+        await db.SaveChangesAsync(cancellationToken);
+
+        return new BalanceClaimResult(
+            BalanceClaimStatus.Joined,
+            player.Balance,
+            player.SteamId);
     }
 }

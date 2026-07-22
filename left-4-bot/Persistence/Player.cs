@@ -16,4 +16,8 @@ public sealed class Player
     public bool IsPriority { get; set; }
 
     public DateTimeOffset? LinkedAt { get; set; }
+
+    public int Balance { get; set; }
+
+    public DateTimeOffset? StarterGrantedAt { get; set; }
 }
