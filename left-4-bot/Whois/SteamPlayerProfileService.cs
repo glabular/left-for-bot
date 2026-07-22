@@ -36,11 +36,68 @@ public sealed class SteamPlayerProfileService
     public bool HasApiKey => !string.IsNullOrWhiteSpace(_options.SteamWebApiKey);
 
     /// <summary>
-    /// Creates an <see cref="HttpClient"/> for Steam Web API calls.
+    /// Resolves a Steam community vanity URL name to Steam64.
     /// </summary>
-    /// <returns>A named HTTP client instance.</returns>
-    private HttpClient CreateClient() =>
-        _httpClientFactory.CreateClient(nameof(SteamPlayerProfileService));
+    /// <param name="vanity">Vanity URL slug from steamcommunity.com/id/…</param>
+    /// <param name="cancellationToken">Token used to cancel the operation.</param>
+    /// <returns>Steam64 when resolved; otherwise <see langword="null"/>.</returns>
+    public async Task<ulong?> ResolveVanityAsync(string vanity, CancellationToken cancellationToken)
+    {
+        if (!HasApiKey || string.IsNullOrWhiteSpace(vanity))
+        {
+            return null;
+        }
+
+        try
+        {
+            var url =
+                "https://api.steampowered.com/ISteamUser/ResolveVanityURL/v1/"
+                + $"?key={Uri.EscapeDataString(_options.SteamWebApiKey)}"
+                + $"&vanityurl={Uri.EscapeDataString(vanity.Trim())}";
+
+            using var response = await CreateClient().GetAsync(url, cancellationToken);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                _logger.LogWarning("ResolveVanityURL failed with {StatusCode}", response.StatusCode);
+
+                return null;
+            }
+
+            await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
+            using var document = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken);
+
+            if (!document.RootElement.TryGetProperty("response", out var responseElement))
+            {
+                return null;
+            }
+
+            if (!responseElement.TryGetProperty("success", out var successElement)
+                || successElement.GetInt32() != 1)
+            {
+                return null;
+            }
+
+            if (!responseElement.TryGetProperty("steamid", out var steamIdElement))
+            {
+                return null;
+            }
+
+            return ulong.TryParse(
+                steamIdElement.GetString(),
+                NumberStyles.Integer,
+                CultureInfo.InvariantCulture,
+                out var steam64)
+                ? steam64
+                : null;
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogWarning(ex, "ResolveVanityURL request failed for {Vanity}", vanity);
+
+            return null;
+        }
+    }    
 
     /// <summary>
     /// Fetches Steam profiles for the given players.
@@ -98,6 +155,13 @@ public sealed class SteamPlayerProfileService
 
         return results;
     }
+
+    /// <summary>
+    /// Creates an <see cref="HttpClient"/> for Steam Web API calls.
+    /// </summary>
+    /// <returns>A named HTTP client instance.</returns>
+    private HttpClient CreateClient() =>
+        _httpClientFactory.CreateClient(nameof(SteamPlayerProfileService));
 
     /// <summary>
     /// Loads VAC ban counts for Steam64 identifiers.
