@@ -17,6 +17,8 @@ public static class PersistenceServiceCollectionExtensions
         services.AddDbContextFactory<BotDbContext>(options =>
             options.UseSqlite($"Data Source={dbPath}"));
 
+        services.AddSingleton<PlayersService>();
+
         return services;
     }
 }
