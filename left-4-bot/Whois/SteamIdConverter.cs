@@ -47,4 +47,30 @@ public static class SteamIdConverter
 
         return true;
     }
+
+    /// <summary>
+    /// Converts a Steam64 ID to a classic Source ID (<c>STEAM_1:Y:Z</c>).
+    /// </summary>
+    /// <param name="steam64">Steam64 value.</param>
+    /// <param name="classicSteamId">When successful, receives the classic Steam ID.</param>
+    /// <returns><see langword="true"/> if conversion succeeded; otherwise, <see langword="false"/>.</returns>
+    public static bool TryFromSteam64(ulong steam64, out string classicSteamId)
+    {
+        classicSteamId = string.Empty;
+
+        if (steam64 < SteamId64Base)
+        {
+            return false;
+        }
+
+        var account = steam64 - SteamId64Base;
+        var y = (int)(account % 2UL);
+        var z = account / 2UL;
+
+        classicSteamId = string.Create(
+            CultureInfo.InvariantCulture,
+            $"STEAM_1:{y}:{z}");
+
+        return true;
+    }
 }
