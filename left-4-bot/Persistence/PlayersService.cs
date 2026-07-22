@@ -43,7 +43,7 @@ public sealed class PlayersService
 
     public async Task<LinkPlayerResult> LinkAsync(
         long telegramUserId,
-        string? displayName,
+        string? telegramUsername,
         string classicSteamId,
         CancellationToken cancellationToken)
     {
@@ -70,7 +70,7 @@ public sealed class PlayersService
             if (bySteam.TelegramUserId is null)
             {
                 bySteam.TelegramUserId = telegramUserId;
-                bySteam.TelegramDisplayName = displayName;
+                bySteam.TelegramUsername = telegramUsername;
                 bySteam.LinkedAt = DateTimeOffset.UtcNow;
                 await db.SaveChangesAsync(cancellationToken);
                 return new LinkPlayerResult(LinkPlayerStatus.Linked, bySteam);
@@ -88,7 +88,7 @@ public sealed class PlayersService
         {
             SteamId = classicSteamId,
             TelegramUserId = telegramUserId,
-            TelegramDisplayName = displayName,
+            TelegramUsername = telegramUsername,
             IsPriority = true,
             LinkedAt = DateTimeOffset.UtcNow,
         };

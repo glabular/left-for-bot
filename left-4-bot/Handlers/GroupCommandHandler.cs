@@ -980,13 +980,13 @@ public sealed class GroupCommandHandler
             return;
         }
 
-        var displayName = message.From.Username is { } username
+        var telegramUsername = message.From.Username is { } username
             ? $"@{username}"
-            : message.From.FirstName;
+            : null;
 
         var result = await _playersService.LinkAsync(
             message.From.Id,
-            displayName,
+            telegramUsername,
             classicSteamId,
             cancellationToken);
 

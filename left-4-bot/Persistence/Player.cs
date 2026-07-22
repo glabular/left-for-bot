@@ -8,7 +8,10 @@ public sealed class Player
 
     public long? TelegramUserId { get; set; }
 
-    public string? TelegramDisplayName { get; set; }
+    /// <summary>
+    /// Public Telegram @username.
+    /// </summary>
+    public string? TelegramUsername { get; set; }
 
     public bool IsPriority { get; set; }
 
