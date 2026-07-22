@@ -1,3 +1,4 @@
+using left_4_bot.Persistence;
 using Microsoft.Extensions.Options;
 
 namespace left_4_bot.ServerLogs;
@@ -10,22 +11,20 @@ public sealed class PlayStatsService
     private readonly FriendlyFireStatsService _friendlyFireStats;
     private readonly ProtectTeammateStatsService _protectTeammateStats;
     private readonly GamingDayOptions _gamingDayOptions;
-    private readonly HashSet<string> _prioritySteamIds;
+    private readonly PlayersService _playersService;
 
     public PlayStatsService(
         ServerLogSyncService logSync,
         FriendlyFireStatsService friendlyFireStats,
         ProtectTeammateStatsService protectTeammateStats,
         IOptions<GamingDayOptions> gamingDayOptions,
-        IOptions<PriorityPlayersOptions> priorityOptions)
+        PlayersService playersService)
     {
         _logSync = logSync;
         _friendlyFireStats = friendlyFireStats;
         _protectTeammateStats = protectTeammateStats;
         _gamingDayOptions = gamingDayOptions.Value;
-        _prioritySteamIds = new HashSet<string>(
-            priorityOptions.Value.SteamIds,
-            StringComparer.Ordinal);
+        _playersService = playersService;
     }
 
     public Task<PlayStatsResult> GetCurrentGamingDayStatsAsync(CancellationToken cancellationToken) =>
@@ -35,6 +34,7 @@ public sealed class PlayStatsService
         DateOnly gamingDayAnchor,
         CancellationToken cancellationToken)
     {
+        var prioritySteamIds = _playersService.GetPrioritySteamIds();
         var bounds = GamingDay.GetBounds(gamingDayAnchor, _gamingDayOptions);
         var calendarDates = GamingDay.GetCalendarDatesToDownload(bounds);
 
@@ -44,7 +44,7 @@ public sealed class PlayStatsService
         var logDownload = await _logSync.DownloadLogFilesAsync(calendarDates, cancellationToken);
         var playStatsDownload = await _logSync.DownloadPlayStatsFilesAsync(calendarDates, cancellationToken);
 
-        var (friendlyFire, protectTeammate) = BuildLogSections(logDownload, bounds);
+        var (friendlyFire, protectTeammate) = BuildLogSections(logDownload, bounds, prioritySteamIds);
 
         if (!playStatsDownload.IsSuccess
             && friendlyFire.State == FriendlyFireSectionState.DownloadFailed
@@ -88,7 +88,7 @@ public sealed class PlayStatsService
 
         var priorityPlayerPresent = friendlyFire.PriorityPlayerPresent
             || protectTeammate.PriorityPlayerPresent
-            || (players?.Keys.Any(_prioritySteamIds.Contains) ?? false);
+            || (players?.Keys.Any(prioritySteamIds.Contains) ?? false);
 
         if (!priorityPlayerPresent)
         {
@@ -103,14 +103,14 @@ public sealed class PlayStatsService
             },
         };
 
-        messages.AddRange(FriendlyFireReportBuilder.BuildMessages(friendlyFire, _prioritySteamIds));
-        messages.AddRange(ProtectTeammateReportBuilder.BuildMessages(protectTeammate, _prioritySteamIds));
+        messages.AddRange(FriendlyFireReportBuilder.BuildMessages(friendlyFire, prioritySteamIds));
+        messages.AddRange(ProtectTeammateReportBuilder.BuildMessages(protectTeammate, prioritySteamIds));
 
         var playersForReport = players ?? new Dictionary<string, PlayerDayStats>(StringComparer.Ordinal);
         var clearsMessage = PlayStatsReportBuilder.BuildCategoryMessageIfHasData(
             PlayStatsCategories.Clears,
             playersForReport,
-            _prioritySteamIds);
+            prioritySteamIds);
         if (clearsMessage is not null)
         {
             messages.Add(clearsMessage);
@@ -126,7 +126,7 @@ public sealed class PlayStatsService
 
         messages.AddRange(PlayStatsReportBuilder.BuildMainCategoryMessages(
             playersForReport,
-            _prioritySteamIds,
+            prioritySteamIds,
             includeFriendlyFireInEmpty,
             includeProtectTeammateInEmpty,
             includeClearsInEmpty));
@@ -135,7 +135,10 @@ public sealed class PlayStatsService
     }
 
     private (FriendlyFireSectionData FriendlyFire, ProtectTeammateSectionData ProtectTeammate)
-        BuildLogSections(TodayLogDownloadResult logDownload, GamingDayBounds bounds)
+        BuildLogSections(
+            TodayLogDownloadResult logDownload,
+            GamingDayBounds bounds,
+            IReadOnlySet<string> prioritySteamIds)
     {
         if (!logDownload.IsSuccess)
         {
@@ -155,7 +158,7 @@ public sealed class PlayStatsService
         var scan = GamingDayLogParser.ScanFiles(
             logDownload.LocalFilePaths,
             bounds,
-            _prioritySteamIds);
+            prioritySteamIds);
 
         return (
             _friendlyFireStats.CreateFriendlyFireSection(scan),
