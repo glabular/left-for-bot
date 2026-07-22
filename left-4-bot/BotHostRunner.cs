@@ -1,11 +1,13 @@
 ﻿using left_4_bot.Call;
 using left_4_bot.Handlers;
 using left_4_bot.L4D2;
+using left_4_bot.Persistence;
 using left_4_bot.Rcon;
 using left_4_bot.ServerLogs;
 using left_4_bot.Spy;
 using left_4_bot.TelegramClient;
 using left_4_bot.Whois;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -47,12 +49,22 @@ public static class BotHostRunner
         builder.Services.AddSingleton<BotUsernameProvider>();
         builder.Services.AddSingleton<GroupCommandHandler>();
 
+        var dbPath = Path.Combine(builder.Environment.ContentRootPath, "data", "bot.db");
+        builder.Services.AddBotPersistence(dbPath);
+
         var host = builder.Build();
 
         System.Console.CancelKeyPress += (_, e) =>
         {
             e.Cancel = true;
         };
+
+        await using (var scope = host.Services.CreateAsyncScope())
+        {
+            var dbFactory = scope.ServiceProvider.GetRequiredService<IDbContextFactory<BotDbContext>>();
+            await using var db = await dbFactory.CreateDbContextAsync();
+            await db.Database.EnsureCreatedAsync();
+        }
 
         await host.RunAsync();
     }
