@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <OutputType>Exe</OutputType>
@@ -13,6 +13,11 @@
 		<PackageReference Include="CoreRCON" Version="5.*" />
 		<PackageReference Include="FluentFTP" Version="53.*" />
 		<PackageReference Include="L4D2PlayStats" Version="1.0.0.58" />
+		<PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.10">
+		  <PrivateAssets>all</PrivateAssets>
+		  <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+		</PackageReference>
+		<PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="10.0.10" />
 		<PackageReference Include="Telegram.Bot" Version="22.*" />
 		<PackageReference Include="Microsoft.Extensions.Hosting" Version="9.*" />
 		<PackageReference Include="Microsoft.Extensions.Http" Version="9.*" />
