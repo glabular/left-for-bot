@@ -1,5 +1,5 @@
+using left_4_bot.Persistence;
 using left_4_bot.ServerLogs;
-using Microsoft.Extensions.Options;
 
 namespace left_4_bot.Spy;
 
@@ -12,22 +12,22 @@ public sealed class SpyLogTailConsumer : IServerLogTailConsumer
 
     private readonly SpyState _state;
     private readonly SpyForwarder _forwarder;
-    private readonly IOptions<PriorityPlayersOptions> _priorityPlayers;
+    private readonly PlayersService _playersService;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="SpyLogTailConsumer"/> class.
     /// </summary>
     /// <param name="state">Shared spy enabled state.</param>
     /// <param name="forwarder">Queue that delivers chat lines to Telegram.</param>
-    /// <param name="priorityPlayers">Priority players whose team chat is never relayed.</param>
+    /// <param name="playersService">Players table used to skip priority players in the feed.</param>
     public SpyLogTailConsumer(
         SpyState state,
         SpyForwarder forwarder,
-        IOptions<PriorityPlayersOptions> priorityPlayers)
+        PlayersService playersService)
     {
         _state = state;
         _forwarder = forwarder;
-        _priorityPlayers = priorityPlayers;
+        _playersService = playersService;
     }
 
     /// <inheritdoc />
@@ -43,9 +43,7 @@ public sealed class SpyLogTailConsumer : IServerLogTailConsumer
             return Task.CompletedTask;
         }
 
-        var priority = _priorityPlayers.Value.SteamIds
-            .Where(id => !string.IsNullOrWhiteSpace(id))
-            .ToHashSet(StringComparer.Ordinal);
+        var priority = _playersService.GetPrioritySteamIds();
 
         foreach (var slice in slices)
         {
