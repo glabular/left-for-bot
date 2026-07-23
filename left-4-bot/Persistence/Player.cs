@@ -20,4 +20,14 @@ public sealed class Player
     public int Balance { get; set; }
 
     public DateTimeOffset? StarterGrantedAt { get; set; }
+
+    /// <summary>
+    /// Gaming-day anchor, for which <see cref="CommandRewardCount"/> applies.
+    /// </summary>
+    public DateOnly? CommandRewardGamingDay { get; set; }
+
+    /// <summary>
+    /// How many command rewards were granted on <see cref="CommandRewardGamingDay"/>.
+    /// </summary>
+    public int CommandRewardCount { get; set; }
 }

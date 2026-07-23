@@ -28,6 +28,12 @@ namespace left_4_bot.Persistence.Migrations
                         .HasColumnType("INTEGER")
                         .HasDefaultValue(0);
 
+                    b.Property<int>("CommandRewardCount")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateOnly?>("CommandRewardGamingDay")
+                        .HasColumnType("TEXT");
+
                     b.Property<bool>("IsPriority")
                         .HasColumnType("INTEGER");
 
