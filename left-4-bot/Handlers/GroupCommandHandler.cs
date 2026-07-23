@@ -944,7 +944,7 @@ public sealed class GroupCommandHandler
 
                 🎉 Поздравляем! 🎉
 
-                На счёт зачислено {PlayersService.StarterTabs} таблов 💊 💊 💊 
+                На счёт зачислено {ToteEconomy.StarterTabs} таблов 💊 💊 💊 
                 💰 Текущий баланс: {result.Balance} таблов.
                 """,
             BalanceClaimStatus.AlreadyJoined =>

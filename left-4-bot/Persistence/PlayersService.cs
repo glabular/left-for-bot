@@ -4,8 +4,6 @@ namespace left_4_bot.Persistence;
 
 public sealed class PlayersService
 {
-    public const int StarterTabs = 1000;
-
     private readonly IDbContextFactory<BotDbContext> _dbFactory;
 
     public PlayersService(IDbContextFactory<BotDbContext> dbFactory)
@@ -126,7 +124,7 @@ public sealed class PlayersService
                 player.SteamId);
         }
 
-        player.Balance = StarterTabs;
+        player.Balance = ToteEconomy.StarterTabs;
         player.StarterGrantedAt = DateTimeOffset.UtcNow;
         await db.SaveChangesAsync(cancellationToken);
 
