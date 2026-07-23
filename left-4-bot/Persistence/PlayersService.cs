@@ -1,14 +1,20 @@
-﻿using Microsoft.EntityFrameworkCore;
+﻿using left_4_bot.ServerLogs;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 
 namespace left_4_bot.Persistence;
 
 public sealed class PlayersService
 {
     private readonly IDbContextFactory<BotDbContext> _dbFactory;
+    private readonly GamingDayOptions _gamingDayOptions;
 
-    public PlayersService(IDbContextFactory<BotDbContext> dbFactory)
+    public PlayersService(
+        IDbContextFactory<BotDbContext> dbFactory,
+        IOptions<GamingDayOptions> gamingDayOptions)
     {
         _dbFactory = dbFactory;
+        _gamingDayOptions = gamingDayOptions.Value;
     }
 
     // TODO: Make async?
@@ -132,5 +138,66 @@ public sealed class PlayersService
             BalanceClaimStatus.Joined,
             player.Balance,
             player.SteamId);
+    }
+
+    /// <summary>
+    /// Grants Tabs for using a bot command, if the player joined the totalizator and under the daily cap.
+    /// </summary>
+    public async Task<CommandRewardResult> TryGrantCommandRewardAsync(
+        long telegramUserId,
+        CancellationToken cancellationToken)
+    {
+        await using var db = await _dbFactory.CreateDbContextAsync(cancellationToken);
+
+        var player = await db.Players
+            .FirstOrDefaultAsync(p => p.TelegramUserId == telegramUserId, cancellationToken);
+
+        if (player is null || player.StarterGrantedAt is null)
+        {
+            return new CommandRewardResult(
+                CommandRewardStatus.NotEligible,
+                Balance: 0,
+                RewardsUsedToday: 0,
+                TabsGrantedToday: 0);
+        }
+
+        var today = GamingDay.GetCurrentAnchor(_gamingDayOptions);
+
+        if (player.CommandRewardGamingDay != today)
+        {
+            player.CommandRewardGamingDay = today;
+            player.CommandRewardCount = 0;
+        }
+
+        if (player.CommandRewardCount >= ToteEconomy.CommandRewardsPerGamingDay)
+        {
+            return new CommandRewardResult(
+                CommandRewardStatus.DailyLimitReached,
+                player.Balance,
+                player.CommandRewardCount,
+                TabsGrantedToday: player.CommandRewardCount * ToteEconomy.CommandRewardTabs);
+        }
+
+        player.CommandRewardCount += 1;
+        player.Balance += ToteEconomy.CommandRewardTabs;
+
+        await db.SaveChangesAsync(cancellationToken);
+
+        var tabsGrantedToday = player.CommandRewardCount * ToteEconomy.CommandRewardTabs;
+
+        if (player.CommandRewardCount >= ToteEconomy.CommandRewardsPerGamingDay)
+        {
+            return new CommandRewardResult(
+                CommandRewardStatus.GrantedDailyComplete,
+                player.Balance,
+                player.CommandRewardCount,
+                tabsGrantedToday);
+        }
+
+        return new CommandRewardResult(
+            CommandRewardStatus.GrantedSilent,
+            player.Balance,
+            player.CommandRewardCount,
+            tabsGrantedToday);
     }
 }
