@@ -213,6 +213,8 @@ public sealed class GroupCommandHandler
         string args,
         CancellationToken cancellationToken)
     {
+        var handled = true;
+
         switch (command.ToLowerInvariant())
         {
             case "map":
@@ -263,7 +265,13 @@ public sealed class GroupCommandHandler
                 break;
 
             default:
+                handled = false;
                 break;
+        }
+
+        if (handled)
+        {
+            await TryGrantCommandRewardAndNotifyAsync(bot, message, cancellationToken);
         }
     }
 
@@ -960,6 +968,40 @@ public sealed class GroupCommandHandler
             message.Chat.Id,
             reply,
             parseMode: ParseMode.Html,
+            cancellationToken: cancellationToken);
+    }
+
+    private async Task TryGrantCommandRewardAndNotifyAsync(
+        ITelegramBotClient bot,
+        Message message,
+        CancellationToken cancellationToken)
+    {
+        if (message.From is null)
+        {
+            return;
+        }
+
+        var result = await _playersService.TryGrantCommandRewardAsync(
+            message.From.Id,
+            cancellationToken);
+
+        if (result.Status != CommandRewardStatus.GrantedDailyComplete)
+        {
+            return;
+        }
+
+        var text =
+            $"""
+            ⚠️ Тотализатор в разработке
+
+            {result.RewardsUsedToday}/{ToteEconomy.CommandRewardsPerGamingDay} наград за сегодня за использование команд получены.
+            Начислено за сегодня: {result.TabsGrantedToday} таблов.
+            Общий баланс: {result.Balance} таблов.
+            """;
+
+        await bot.SendMessage(
+            message.Chat.Id,
+            text,
             cancellationToken: cancellationToken);
     }
 
