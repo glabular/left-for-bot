@@ -271,7 +271,7 @@ public sealed class GroupCommandHandler
 
         if (handled)
         {
-            await TryGrantCommandRewardAndNotifyAsync(bot, message, cancellationToken);
+            await TryGrantCommandRewardAndNotifyAsync(bot, message, command, args, cancellationToken);
         }
     }
 
@@ -974,6 +974,8 @@ public sealed class GroupCommandHandler
     private async Task TryGrantCommandRewardAndNotifyAsync(
         ITelegramBotClient bot,
         Message message,
+        string command,
+        string args,
         CancellationToken cancellationToken)
     {
         if (message.From is null)
@@ -981,8 +983,15 @@ public sealed class GroupCommandHandler
             return;
         }
 
+        var tabsAmount = CommandRewardPolicy.Resolve(command, args);
+        if (tabsAmount <= 0)
+        {
+            return;
+        }
+
         var result = await _playersService.TryGrantCommandRewardAsync(
             message.From.Id,
+            tabsAmount,
             cancellationToken);
 
         if (result.Status != CommandRewardStatus.GrantedDailyComplete)

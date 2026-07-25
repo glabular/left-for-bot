@@ -141,12 +141,23 @@ public sealed class PlayersService
     }
 
     /// <summary>
-    /// Grants Tabs for using a bot command, if the player joined the totalizator and under the daily cap.
+    /// Grants the given Tabs amount for a bot command use, if eligible and under the daily cap.
     /// </summary>
+    /// <param name="tabsAmount">Tabs to add; must be positive.</param>
     public async Task<CommandRewardResult> TryGrantCommandRewardAsync(
         long telegramUserId,
+        int tabsAmount,
         CancellationToken cancellationToken)
     {
+        if (tabsAmount <= 0)
+        {
+            return new CommandRewardResult(
+                CommandRewardStatus.NotEligible,
+                Balance: 0,
+                RewardsUsedToday: 0,
+                TabsGrantedToday: 0);
+        }
+
         await using var db = await _dbFactory.CreateDbContextAsync(cancellationToken);
 
         var player = await db.Players
@@ -167,6 +178,7 @@ public sealed class PlayersService
         {
             player.CommandRewardGamingDay = today;
             player.CommandRewardCount = 0;
+            player.CommandRewardTabsGrantedToday = 0;
         }
 
         if (player.CommandRewardCount >= ToteEconomy.CommandRewardsPerGamingDay)
@@ -175,15 +187,14 @@ public sealed class PlayersService
                 CommandRewardStatus.DailyLimitReached,
                 player.Balance,
                 player.CommandRewardCount,
-                TabsGrantedToday: player.CommandRewardCount * ToteEconomy.CommandRewardTabs);
+                player.CommandRewardTabsGrantedToday);
         }
 
         player.CommandRewardCount += 1;
-        player.Balance += ToteEconomy.CommandRewardTabs;
+        player.Balance += tabsAmount;
+        player.CommandRewardTabsGrantedToday += tabsAmount;
 
         await db.SaveChangesAsync(cancellationToken);
-
-        var tabsGrantedToday = player.CommandRewardCount * ToteEconomy.CommandRewardTabs;
 
         if (player.CommandRewardCount >= ToteEconomy.CommandRewardsPerGamingDay)
         {
@@ -191,13 +202,13 @@ public sealed class PlayersService
                 CommandRewardStatus.GrantedDailyComplete,
                 player.Balance,
                 player.CommandRewardCount,
-                tabsGrantedToday);
+                player.CommandRewardTabsGrantedToday);
         }
 
         return new CommandRewardResult(
             CommandRewardStatus.GrantedSilent,
             player.Balance,
             player.CommandRewardCount,
-            tabsGrantedToday);
+            player.CommandRewardTabsGrantedToday);
     }
 }
