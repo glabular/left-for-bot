@@ -30,4 +30,9 @@ public sealed class Player
     /// How many command rewards were granted on <see cref="CommandRewardGamingDay"/>.
     /// </summary>
     public int CommandRewardCount { get; set; }
+
+    /// <summary>
+    /// Sum of Tabs granted via command rewards on <see cref="CommandRewardGamingDay"/>.
+    /// </summary>
+    public int CommandRewardTabsGrantedToday { get; set; }
 }

@@ -34,6 +34,9 @@ namespace left_4_bot.Persistence.Migrations
                     b.Property<DateOnly?>("CommandRewardGamingDay")
                         .HasColumnType("TEXT");
 
+                    b.Property<int>("CommandRewardTabsGrantedToday")
+                        .HasColumnType("INTEGER");
+
                     b.Property<bool>("IsPriority")
                         .HasColumnType("INTEGER");
 
