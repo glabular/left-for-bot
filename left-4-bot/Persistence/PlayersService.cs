@@ -29,6 +29,51 @@ public sealed class PlayersService
             .ToHashSet(StringComparer.Ordinal);
     }
 
+    /// <summary>
+    /// Priority players ordered by SteamId for stable /bet list numbers.
+    /// </summary>
+    public IReadOnlyList<Player> GetPriorityPlayers()
+    {
+        using var db = _dbFactory.CreateDbContext();
+
+        return db.Players
+            .AsNoTracking()
+            .Where(p => p.IsPriority)
+            .OrderBy(p => p.SteamId)
+            .ToList();
+    }
+
+    /// <summary>
+    /// Applies <paramref name="delta"/> to balance (negative holds Tabs, positive refunds).
+    /// Fails when the result would be negative.
+    /// </summary>
+    public async Task<BalanceAdjustResult> TryAdjustBalanceAsync(
+        long telegramUserId,
+        int delta,
+        CancellationToken cancellationToken)
+    {
+        await using var db = await _dbFactory.CreateDbContextAsync(cancellationToken);
+
+        var player = await db.Players
+            .FirstOrDefaultAsync(p => p.TelegramUserId == telegramUserId, cancellationToken);
+
+        if (player is null)
+        {
+            return new BalanceAdjustResult(BalanceAdjustStatus.NeedLink, Balance: 0);
+        }
+
+        var next = player.Balance + delta;
+        if (next < 0)
+        {
+            return new BalanceAdjustResult(BalanceAdjustStatus.InsufficientBalance, player.Balance);
+        }
+
+        player.Balance = next;
+        await db.SaveChangesAsync(cancellationToken);
+
+        return new BalanceAdjustResult(BalanceAdjustStatus.Adjusted, player.Balance);
+    }
+
     public Player? FindByTelegramUserId(long telegramUserId)
     {
         using var db = _dbFactory.CreateDbContext();

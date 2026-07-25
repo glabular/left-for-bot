@@ -331,4 +331,97 @@ public sealed class SteamPlayerProfileService
             return (null, null);
         }
     }
+
+    /// <summary>
+    /// Loads Steam community display names (persona names) for classic Steam IDs.
+    /// </summary>
+    public async Task<IReadOnlyDictionary<string, string>> GetPersonaNamesByClassicSteamIdAsync(
+        IReadOnlyList<string> classicSteamIds,
+        CancellationToken cancellationToken)
+    {
+        var result = new Dictionary<string, string>(StringComparer.Ordinal);
+
+        if (classicSteamIds.Count == 0 || !HasApiKey)
+        {
+            return result;
+        }
+
+        var classicBySteam64 = new Dictionary<ulong, string>();
+
+        foreach (var classic in classicSteamIds.Distinct(StringComparer.Ordinal))
+        {
+            if (SteamIdConverter.TryToSteam64(classic, out var steam64))
+            {
+                classicBySteam64[steam64] = classic;
+            }
+        }
+
+        if (classicBySteam64.Count == 0)
+        {
+            return result;
+        }
+
+        try
+        {
+            var steamIds = string.Join(',', classicBySteam64.Keys.Select(id =>
+                id.ToString(CultureInfo.InvariantCulture)));
+
+            var url =
+                "https://api.steampowered.com/ISteamUser/GetPlayerSummaries/v2/"
+                + $"?key={Uri.EscapeDataString(_options.SteamWebApiKey)}"
+                + $"&steamids={steamIds}";
+
+            using var response = await CreateClient().GetAsync(url, cancellationToken);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                _logger.LogWarning("GetPlayerSummaries failed with {StatusCode}", response.StatusCode);
+                return result;
+            }
+
+            await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
+            using var document = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken);
+
+            if (!document.RootElement.TryGetProperty("response", out var responseElement)
+                || !responseElement.TryGetProperty("players", out var playersElement))
+            {
+                return result;
+            }
+
+            foreach (var player in playersElement.EnumerateArray())
+            {
+                if (!player.TryGetProperty("steamid", out var steamIdElement)
+                    || !ulong.TryParse(
+                        steamIdElement.GetString(),
+                        NumberStyles.Integer,
+                        CultureInfo.InvariantCulture,
+                        out var steam64))
+                {
+                    continue;
+                }
+
+                if (!classicBySteam64.TryGetValue(steam64, out var classic))
+                {
+                    continue;
+                }
+
+                if (!player.TryGetProperty("personaname", out var nameElement))
+                {
+                    continue;
+                }
+
+                var name = nameElement.GetString();
+                if (!string.IsNullOrWhiteSpace(name))
+                {
+                    result[classic] = name.Trim();
+                }
+            }
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogWarning(ex, "GetPlayerSummaries request failed");
+        }
+
+        return result;
+    }
 }

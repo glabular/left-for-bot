@@ -58,6 +58,7 @@ public sealed class GroupCommandHandler
 
         ⚠️ <b>Тотализатор (в разработке)</b>
         /balance — баланс таблов.
+        /bet — рынок (топ-1, Защита союзников): список целей и ставка.
 
         ℹ️ <b>Справка</b>
         /help — эта справка.
@@ -177,6 +178,7 @@ public sealed class GroupCommandHandler
     private readonly SpyState _spyState;
     private readonly PlayersService _playersService;
     private readonly SteamPlayerProfileService _steamProfiles;
+    private readonly BettingService _bettingService;
 
     public GroupCommandHandler(
         GoldenPoolService goldenPool,
@@ -190,7 +192,8 @@ public sealed class GroupCommandHandler
         WhoisSessionTracker whoisSessionTracker,
         SpyState spyState,
         PlayersService playersService,
-        SteamPlayerProfileService steamProfiles)
+        SteamPlayerProfileService steamProfiles,
+        BettingService bettingService)
     {
         _goldenPool = goldenPool;
         _editLimiter = editLimiter;
@@ -204,6 +207,7 @@ public sealed class GroupCommandHandler
         _spyState = spyState;
         _playersService = playersService;
         _steamProfiles = steamProfiles;
+        _bettingService = bettingService;
     }
 
     public async Task HandleAsync(
@@ -262,6 +266,10 @@ public sealed class GroupCommandHandler
 
             case "balance":
                 await HandleBalanceAsync(bot, message, cancellationToken);
+                break;
+
+            case "bet":
+                await HandleBetAsync(bot, message, args, cancellationToken);
                 break;
 
             default:
@@ -969,6 +977,383 @@ public sealed class GroupCommandHandler
             reply,
             parseMode: ParseMode.Html,
             cancellationToken: cancellationToken);
+    }
+
+    private const string BetMiniHelpText =
+        """
+        Как сделать ставку:
+            /bet <номер> <сумма>
+        Пример: /bet 3 100
+
+        Отменить ставку:
+            /bet cancel
+        """;
+
+    private static string BetDayIntroText =>
+        $"Сейчас можно поставить таблы на то, кто займёт 1 место по «{BettingMarket.CategoryTitle}» за игровой день.";
+
+    private async Task HandleBetAsync(
+        ITelegramBotClient bot,
+        Message message,
+        string args,
+        CancellationToken cancellationToken)
+    {
+        if (message.From is null)
+        {
+            return;
+        }
+
+        var trimmed = args.Trim();
+        var telegramUserId = message.From.Id;
+
+        if (string.IsNullOrEmpty(trimmed))
+        {
+            await SendBetListAsync(bot, message, telegramUserId, errorLine: null, cancellationToken);
+            return;
+        }
+
+        if (trimmed.Equals("cancel", StringComparison.OrdinalIgnoreCase))
+        {
+            var cancelResult = await _bettingService.CancelAsync(telegramUserId, cancellationToken);
+            var cancelNames = await ResolveBetDisplayNamesAsync(cancelResult.PriorityTargets, cancellationToken);
+            await bot.SendMessage(
+                message.Chat.Id,
+                FormatBetActionReply(cancelResult, cancelNames),
+                cancellationToken: cancellationToken);
+            return;
+        }
+
+        var parts = trimmed.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        if (parts.Length != 2
+            || !int.TryParse(parts[0], out var index)
+            || !int.TryParse(parts[1], out var amount))
+        {
+            await SendBetListAsync(
+                bot,
+                message,
+                telegramUserId,
+                errorLine: "Не понял формат. Нужны номер из списка и сумма таблов.",
+                cancellationToken);
+            return;
+        }
+
+        var result = await _bettingService.PlaceOrReplaceAsync(
+            telegramUserId,
+            index,
+            amount,
+            cancellationToken);
+
+        var names = await ResolveBetDisplayNamesAsync(result.PriorityTargets, cancellationToken);
+        await bot.SendMessage(
+            message.Chat.Id,
+            FormatBetActionReply(result, names),
+            cancellationToken: cancellationToken);
+    }
+
+    private async Task SendBetListAsync(
+        ITelegramBotClient bot,
+        Message message,
+        long telegramUserId,
+        string? errorLine,
+        CancellationToken cancellationToken)
+    {
+        var targets = _bettingService.GetPriorityTargets();
+        var current = _bettingService.TryGetCurrentBet(telegramUserId);
+        var names = await ResolveBetDisplayNamesAsync(targets, cancellationToken);
+        var text = FormatBetListMessage(targets, current, errorLine, names);
+
+        await bot.SendMessage(
+            message.Chat.Id,
+            text,
+            cancellationToken: cancellationToken);
+    }
+
+    private async Task<IReadOnlyDictionary<string, string>> ResolveBetDisplayNamesAsync(
+        IReadOnlyList<Player> targets,
+        CancellationToken cancellationToken)
+    {
+        if (targets.Count == 0)
+        {
+            return new Dictionary<string, string>(StringComparer.Ordinal);
+        }
+
+        var personaBySteamId = await _steamProfiles.GetPersonaNamesByClassicSteamIdAsync(
+            targets.Select(t => t.SteamId).ToList(),
+            cancellationToken);
+
+        var display = new Dictionary<string, string>(StringComparer.Ordinal);
+
+        foreach (var target in targets)
+        {
+            display[target.SteamId] = BuildBetDisplayName(target, personaBySteamId);
+        }
+
+        return display;
+    }
+
+    private static string BuildBetDisplayName(
+        Player player,
+        IReadOnlyDictionary<string, string> personaBySteamId)
+    {
+        if (personaBySteamId.TryGetValue(player.SteamId, out var personaName)
+            && !string.IsNullOrWhiteSpace(personaName))
+        {
+            return personaName;
+        }
+
+        if (!string.IsNullOrWhiteSpace(player.TelegramUsername))
+        {
+            return player.TelegramUsername!;
+        }
+
+        return "Игрок без публичного ника";
+    }
+
+    private static string FormatBetListMessage(
+        IReadOnlyList<Player> targets,
+        DailyBet? currentBet,
+        string? errorLine,
+        IReadOnlyDictionary<string, string> displayNames)
+    {
+        var builder = new System.Text.StringBuilder();
+        builder.AppendLine("⚠️ Тотализатор в разработке");
+        builder.AppendLine();
+
+        // The market description belongs to the plain /bet help only, not to error replies.
+        if (string.IsNullOrEmpty(errorLine))
+        {
+            builder.AppendLine(BetDayIntroText);
+            builder.AppendLine();
+        }
+        else
+        {
+            builder.AppendLine(errorLine);
+            builder.AppendLine();
+        }
+
+        if (currentBet is not null)
+        {
+            var targetLabel = displayNames.TryGetValue(currentBet.TargetSteamId, out var name)
+                ? name
+                : "выбранный игрок";
+            builder.AppendLine(
+                $"Твоя ставка сейчас: {currentBet.Amount} таблов на {targetLabel} (1 место по «{BettingMarket.CategoryTitle}»).");
+            builder.AppendLine();
+        }
+
+        if (targets.Count == 0)
+        {
+            builder.AppendLine("Пока некого выбрать: в приоритетном списке никого нет.");
+        }
+        else
+        {
+            builder.AppendLine("Выбери игрока по номеру:");
+            for (var i = 0; i < targets.Count; i++)
+            {
+                builder.AppendLine(FormatPriorityTargetLine(i + 1, targets[i], displayNames));
+            }
+        }
+
+        builder.AppendLine();
+        builder.Append(BetMiniHelpText);
+        return builder.ToString();
+    }
+
+    private static string FormatPriorityTargetLine(
+        int number,
+        Player player,
+        IReadOnlyDictionary<string, string> displayNames)
+    {
+        var label = displayNames.TryGetValue(player.SteamId, out var name)
+            ? name
+            : BuildBetDisplayName(player, displayNames);
+        return $"{number}. {label}";
+    }
+
+    private static string FormatBetActionReply(
+        BetActionResult result,
+        IReadOnlyDictionary<string, string> displayNames)
+    {
+        var header = "⚠️ Тотализатор в разработке";
+
+        switch (result.Status)
+        {
+            case BetActionStatus.Placed:
+                return
+                    $"""
+                    {header}
+
+                    Готово! Ты поставил {result.Bet!.Amount} таблов на то, что {FormatTargetLabel(result.Bet.TargetSteamId, result.PriorityTargets, displayNames)} займёт 1 место по «{BettingMarket.CategoryTitle}».
+                    Остаток на счёте: {result.Balance} таблов.
+                    """;
+
+            case BetActionStatus.Replaced:
+                return
+                    $"""
+                    {header}
+
+                    Ставка обновлена: {result.Bet!.Amount} таблов на то, что {FormatTargetLabel(result.Bet.TargetSteamId, result.PriorityTargets, displayNames)} займёт 1 место по «{BettingMarket.CategoryTitle}».
+                    Остаток на счёте: {result.Balance} таблов.
+                    """;
+
+            case BetActionStatus.Cancelled:
+                return
+                    $"""
+                    {header}
+
+                    Ставка отменена. {result.Bet!.Amount} таблов вернулись на счёт.
+                    Сейчас на счёте: {result.Balance} таблов.
+                    """;
+
+            case BetActionStatus.NeedLink:
+                return
+                    $"""
+                    {header}
+
+                    Сначала привяжи Steam:
+                        /link <ссылка на профиль Steam>
+
+                    {BetMiniHelpText}
+                    """;
+
+            case BetActionStatus.NeedStarter:
+                return
+                    $"""
+                    {header}
+
+                    Сначала получи стартовые таблы:
+                        /balance
+
+                    {BetMiniHelpText}
+                    """;
+
+            case BetActionStatus.WindowClosed:
+                return
+                    $"""
+                    {header}
+
+                    Приём ставок уже закрыт (после {ToteEconomy.BetWindowCloseHourMsk}:00 по Москве).
+                    Ждём итог игрового дня по «{BettingMarket.CategoryTitle}».
+
+                    {BetMiniHelpText}
+                    """;
+
+            case BetActionStatus.NoPriorityTargets:
+                return
+                    $"""
+                    {header}
+
+                    Пока некого выбрать: в приоритетном списке никого нет.
+
+                    {BetMiniHelpText}
+                    """;
+
+            case BetActionStatus.NothingToCancel:
+                return
+                    $"""
+                    {header}
+
+                    У тебя нет активной ставки, которую можно отменить.
+
+                    {FormatTargetsAndHelp(result.PriorityTargets, result.Bet, displayNames)}
+                    """;
+
+            case BetActionStatus.InvalidTargetIndex:
+                return
+                    $"""
+                    {header}
+
+                    Такого номера в списке нет. Возьми номер из списка ниже.
+
+                    {FormatTargetsAndHelp(result.PriorityTargets, result.Bet, displayNames)}
+                    """;
+
+            case BetActionStatus.InvalidAmount:
+                return
+                    $"""
+                    {header}
+
+                    Сумма должна быть целым числом от {ToteEconomy.MinBetTabs} таблов.
+
+                    {FormatTargetsAndHelp(result.PriorityTargets, result.Bet, displayNames)}
+                    """;
+
+            case BetActionStatus.InsufficientBalance:
+                return
+                    $"""
+                    {header}
+
+                    Не хватает таблов (сейчас на счёте: {result.Balance}).
+
+                    {FormatTargetsAndHelp(result.PriorityTargets, result.Bet, displayNames)}
+                    """;
+
+            default:
+                return
+                    $"""
+                    {header}
+
+                    Не удалось обработать ставку.
+
+                    {BetMiniHelpText}
+                    """;
+        }
+    }
+
+    private static string FormatTargetLabel(
+        string steamId,
+        IReadOnlyList<Player> targets,
+        IReadOnlyDictionary<string, string> displayNames)
+    {
+        if (displayNames.TryGetValue(steamId, out var name))
+        {
+            return name;
+        }
+
+        for (var i = 0; i < targets.Count; i++)
+        {
+            if (targets[i].SteamId == steamId)
+            {
+                return BuildBetDisplayName(targets[i], displayNames);
+            }
+        }
+
+        return "этот игрок";
+    }
+
+    private static string FormatTargetsAndHelp(
+        IReadOnlyList<Player> targets,
+        DailyBet? currentBet,
+        IReadOnlyDictionary<string, string> displayNames)
+    {
+        var builder = new System.Text.StringBuilder();
+
+        if (currentBet is not null)
+        {
+            var targetLabel = displayNames.TryGetValue(currentBet.TargetSteamId, out var name)
+                ? name
+                : "выбранный игрок";
+            builder.AppendLine(
+                $"Твоя ставка сейчас: {currentBet.Amount} таблов на {targetLabel} (1 место по «{BettingMarket.CategoryTitle}»).");
+            builder.AppendLine();
+        }
+
+        if (targets.Count == 0)
+        {
+            builder.AppendLine("Пока некого выбрать: в приоритетном списке никого нет.");
+        }
+        else
+        {
+            builder.AppendLine("Выбери игрока по номеру:");
+            for (var i = 0; i < targets.Count; i++)
+            {
+                builder.AppendLine(FormatPriorityTargetLine(i + 1, targets[i], displayNames));
+            }
+        }
+
+        builder.AppendLine();
+        builder.Append(BetMiniHelpText);
+        return builder.ToString();
     }
 
     private async Task TryGrantCommandRewardAndNotifyAsync(

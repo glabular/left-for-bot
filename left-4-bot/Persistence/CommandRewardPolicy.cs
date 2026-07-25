@@ -14,6 +14,8 @@ public static class CommandRewardPolicy
         ["help"] = 0,
         ["link"] = 0,
         ["balance"] = 0,
+        // /bet never grants the daily command-use reward.
+        ["bet"] = 0,
 
         ["map"] = ToteEconomy.CommandRewardTabs,
         ["favmaps"] = ToteEconomy.CommandRewardTabs,
