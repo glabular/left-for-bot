@@ -18,4 +18,20 @@ public static class ToteEconomy
     public const int DailyCategoryPlace2Tabs = 25;
 
     public const int DailyCategoryPlace3Tabs = 20;
+
+    /// <summary>
+    /// Minimum distinct bettors for a daily market; otherwise the market
+    /// is cancelled and all stakes are refunded.
+    /// </summary>
+    public const int MinBettorsPerMarket = 3;
+
+    /// <summary>
+    /// Minimum single bet in Tabs.
+    /// </summary>
+    public const int MinBetTabs = 1;
+
+    /// <summary>
+    /// Moscow hour (UTC+3) when the betting window closes.
+    /// </summary>
+    public const int BetWindowCloseHourMsk = 18;
 }
