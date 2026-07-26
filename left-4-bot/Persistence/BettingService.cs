@@ -1,32 +1,53 @@
 using left_4_bot.ServerLogs;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 
 namespace left_4_bot.Persistence;
 
 public sealed class BettingService
 {
+    private readonly IDbContextFactory<BotDbContext> _dbFactory;
     private readonly PlayersService _playersService;
-    private readonly InMemoryDailyBetStore _betStore;
     private readonly GamingDayOptions _gamingDayOptions;
     private readonly SemaphoreSlim _placeGate = new(1, 1);
 
     public BettingService(
+        IDbContextFactory<BotDbContext> dbFactory,
         PlayersService playersService,
-        InMemoryDailyBetStore betStore,
         IOptions<GamingDayOptions> gamingDayOptions)
     {
+        _dbFactory = dbFactory;
         _playersService = playersService;
-        _betStore = betStore;
         _gamingDayOptions = gamingDayOptions.Value;
     }
 
     public IReadOnlyList<Player> GetPriorityTargets() =>
         _playersService.GetPriorityPlayers();
 
-    public DailyBet? TryGetCurrentBet(long telegramUserId)
+    public async Task<DailyBet?> TryGetCurrentBetAsync(
+        long telegramUserId,
+        CancellationToken cancellationToken)
     {
         var today = GamingDay.GetCurrentAnchor(_gamingDayOptions);
-        return _betStore.TryGet(today, telegramUserId);
+
+        await using var db = await _dbFactory.CreateDbContextAsync(cancellationToken);
+
+        return await db.DailyBets
+            .AsNoTracking()
+            .FirstOrDefaultAsync(
+                b => b.GamingDayAnchor == today && b.TelegramUserId == telegramUserId,
+                cancellationToken);
+    }
+
+    public async Task<DailyMarket?> GetMarketAsync(
+        DateOnly gamingDayAnchor,
+        CancellationToken cancellationToken)
+    {
+        await using var db = await _dbFactory.CreateDbContextAsync(cancellationToken);
+
+        return await db.DailyMarkets
+            .AsNoTracking()
+            .FirstOrDefaultAsync(m => m.GamingDayAnchor == gamingDayAnchor, cancellationToken);
     }
 
     public async Task<BetActionResult> PlaceOrReplaceAsync(
@@ -37,36 +58,36 @@ public sealed class BettingService
     {
         var targets = GetPriorityTargets();
 
-        var player = _playersService.FindByTelegramUserId(telegramUserId);
+        var playerSnapshot = _playersService.FindByTelegramUserId(telegramUserId);
 
-        if (player is null)
+        if (playerSnapshot is null)
         {
             return Fail(BetActionStatus.NeedLink, targets, balance: 0);
         }
 
-        if (player.StarterGrantedAt is null)
+        if (playerSnapshot.StarterGrantedAt is null)
         {
-            return Fail(BetActionStatus.NeedStarter, targets, player.Balance);
+            return Fail(BetActionStatus.NeedStarter, targets, playerSnapshot.Balance);
         }
 
         if (!BettingWindow.IsOpen(_gamingDayOptions))
         {
-            return Fail(BetActionStatus.WindowClosed, targets, player.Balance);
+            return Fail(BetActionStatus.WindowClosed, targets, playerSnapshot.Balance);
         }
 
         if (targets.Count == 0)
         {
-            return Fail(BetActionStatus.NoPriorityTargets, targets, player.Balance);
+            return Fail(BetActionStatus.NoPriorityTargets, targets, playerSnapshot.Balance);
         }
 
         if (oneBasedIndex < 1 || oneBasedIndex > targets.Count)
         {
-            return Fail(BetActionStatus.InvalidTargetIndex, targets, player.Balance);
+            return Fail(BetActionStatus.InvalidTargetIndex, targets, playerSnapshot.Balance);
         }
 
         if (amount < ToteEconomy.MinBetTabs)
         {
-            return Fail(BetActionStatus.InvalidAmount, targets, player.Balance);
+            return Fail(BetActionStatus.InvalidAmount, targets, playerSnapshot.Balance);
         }
 
         var today = GamingDay.GetCurrentAnchor(_gamingDayOptions);
@@ -76,35 +97,88 @@ public sealed class BettingService
 
         try
         {
-            var previous = _betStore.TryGet(today, telegramUserId);
-            var held = previous?.Amount ?? 0;
-            var delta = held - amount;
+            await using var db = await _dbFactory.CreateDbContextAsync(cancellationToken);
+            await using var tx = await db.Database.BeginTransactionAsync(cancellationToken);
 
-            var adjust = await _playersService.TryAdjustBalanceAsync(
-                telegramUserId,
-                delta,
-                cancellationToken);
+            var player = await db.Players
+                .FirstOrDefaultAsync(p => p.TelegramUserId == telegramUserId, cancellationToken);
 
-            if (adjust.Status == BalanceAdjustStatus.NeedLink)
+            if (player is null)
             {
                 return Fail(BetActionStatus.NeedLink, targets, balance: 0);
             }
 
-            if (adjust.Status == BalanceAdjustStatus.InsufficientBalance)
+            if (player.StarterGrantedAt is null)
+            {
+                return Fail(BetActionStatus.NeedStarter, targets, player.Balance);
+            }
+
+            var market = await db.DailyMarkets
+                .FirstOrDefaultAsync(m => m.GamingDayAnchor == today, cancellationToken);
+
+            if (market is not null && market.Status != DailyMarketStatus.Open)
+            {
+                return Fail(BetActionStatus.WindowClosed, targets, player.Balance);
+            }
+
+            var previous = await db.DailyBets
+                .FirstOrDefaultAsync(
+                    b => b.GamingDayAnchor == today && b.TelegramUserId == telegramUserId,
+                    cancellationToken);
+
+            var isReplace = previous is not null;
+            var held = previous?.Amount ?? 0;
+            var delta = held - amount;
+            var nextBalance = player.Balance + delta;
+
+            if (nextBalance < 0)
             {
                 return new BetActionResult(
                     BetActionStatus.InsufficientBalance,
                     previous,
-                    adjust.Balance,
+                    player.Balance,
                     targets);
             }
 
-            var placed = new DailyBet(today, telegramUserId, target.SteamId, amount);
-            _betStore.Set(placed);
+            if (market is null)
+            {
+                db.DailyMarkets.Add(new DailyMarket
+                {
+                    GamingDayAnchor = today,
+                    Status = DailyMarketStatus.Open,
+                });
+            }
 
-            var status = previous is null ? BetActionStatus.Placed : BetActionStatus.Replaced;
+            player.Balance = nextBalance;
 
-            return new BetActionResult(status, placed, adjust.Balance, targets);
+            DailyBet placed;
+
+            if (previous is null)
+            {
+                placed = new DailyBet
+                {
+                    GamingDayAnchor = today,
+                    TelegramUserId = telegramUserId,
+                    TargetSteamId = target.SteamId,
+                    Amount = amount,
+                };
+                db.DailyBets.Add(placed);
+            }
+            else
+            {
+                previous.TargetSteamId = target.SteamId;
+                previous.Amount = amount;
+                placed = previous;
+            }
+
+            await db.SaveChangesAsync(cancellationToken);
+            await tx.CommitAsync(cancellationToken);
+
+            return new BetActionResult(
+                isReplace ? BetActionStatus.Replaced : BetActionStatus.Placed,
+                placed,
+                player.Balance,
+                targets);
         }
         finally
         {
@@ -119,19 +193,20 @@ public sealed class BettingService
         var targets = GetPriorityTargets();
         var today = GamingDay.GetCurrentAnchor(_gamingDayOptions);
 
-        var player = _playersService.FindByTelegramUserId(telegramUserId);
+        var playerSnapshot = _playersService.FindByTelegramUserId(telegramUserId);
 
-        if (player is null)
+        if (playerSnapshot is null)
         {
             return Fail(BetActionStatus.NeedLink, targets, balance: 0);
         }
 
         if (!BettingWindow.IsOpen(_gamingDayOptions))
         {
+            var existing = await TryGetCurrentBetAsync(telegramUserId, cancellationToken);
             return new BetActionResult(
                 BetActionStatus.WindowClosed,
-                _betStore.TryGet(today, telegramUserId),
-                player.Balance,
+                existing,
+                playerSnapshot.Balance,
                 targets);
         }
 
@@ -139,7 +214,41 @@ public sealed class BettingService
 
         try
         {
-            if (!_betStore.TryRemove(today, telegramUserId, out var removed) || removed is null)
+            await using var db = await _dbFactory.CreateDbContextAsync(cancellationToken);
+            await using var tx = await db.Database.BeginTransactionAsync(cancellationToken);
+
+            var player = await db.Players
+                .FirstOrDefaultAsync(p => p.TelegramUserId == telegramUserId, cancellationToken);
+
+            if (player is null)
+            {
+                return Fail(BetActionStatus.NeedLink, targets, balance: 0);
+            }
+
+            var market = await db.DailyMarkets
+                .FirstOrDefaultAsync(m => m.GamingDayAnchor == today, cancellationToken);
+
+            if (market is not null && market.Status != DailyMarketStatus.Open)
+            {
+                var lockedBet = await db.DailyBets
+                    .AsNoTracking()
+                    .FirstOrDefaultAsync(
+                        b => b.GamingDayAnchor == today && b.TelegramUserId == telegramUserId,
+                        cancellationToken);
+
+                return new BetActionResult(
+                    BetActionStatus.WindowClosed,
+                    lockedBet,
+                    player.Balance,
+                    targets);
+            }
+
+            var bet = await db.DailyBets
+                .FirstOrDefaultAsync(
+                    b => b.GamingDayAnchor == today && b.TelegramUserId == telegramUserId,
+                    cancellationToken);
+
+            if (bet is null)
             {
                 return new BetActionResult(
                     BetActionStatus.NothingToCancel,
@@ -148,22 +257,25 @@ public sealed class BettingService
                     targets);
             }
 
-            var adjust = await _playersService.TryAdjustBalanceAsync(
-                telegramUserId,
-                removed.Amount,
-                cancellationToken);
-
-            if (adjust.Status != BalanceAdjustStatus.Adjusted)
+            var removed = new DailyBet
             {
-                _betStore.Set(removed);
+                Id = bet.Id,
+                GamingDayAnchor = bet.GamingDayAnchor,
+                TelegramUserId = bet.TelegramUserId,
+                TargetSteamId = bet.TargetSteamId,
+                Amount = bet.Amount,
+            };
 
-                return Fail(BetActionStatus.NeedLink, targets, adjust.Balance, removed);
-            }
+            player.Balance += bet.Amount;
+            db.DailyBets.Remove(bet);
+
+            await db.SaveChangesAsync(cancellationToken);
+            await tx.CommitAsync(cancellationToken);
 
             return new BetActionResult(
                 BetActionStatus.Cancelled,
                 removed,
-                adjust.Balance,
+                player.Balance,
                 targets);
         }
         finally

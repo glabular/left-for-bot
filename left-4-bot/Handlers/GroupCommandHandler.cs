@@ -1058,7 +1058,7 @@ public sealed class GroupCommandHandler
         CancellationToken cancellationToken)
     {
         var targets = _bettingService.GetPriorityTargets();
-        var current = _bettingService.TryGetCurrentBet(telegramUserId);
+        var current = await _bettingService.TryGetCurrentBetAsync(telegramUserId, cancellationToken);
         var names = await ResolveBetDisplayNamesAsync(targets, cancellationToken);
         var text = FormatBetListMessage(targets, current, errorLine, names);
 

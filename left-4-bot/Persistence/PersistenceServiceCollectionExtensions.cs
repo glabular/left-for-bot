@@ -18,7 +18,6 @@ public static class PersistenceServiceCollectionExtensions
             options.UseSqlite($"Data Source={dbPath}"));
 
         services.AddSingleton<PlayersService>();
-        services.AddSingleton<InMemoryDailyBetStore>();
         services.AddSingleton<BettingService>();
 
         return services;

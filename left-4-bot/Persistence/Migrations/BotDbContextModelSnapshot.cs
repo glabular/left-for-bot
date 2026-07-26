@@ -17,6 +17,54 @@ namespace left_4_bot.Persistence.Migrations
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "10.0.10");
 
+            modelBuilder.Entity("left_4_bot.Persistence.DailyBet", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("Amount")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateOnly>("GamingDayAnchor")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("TargetSteamId")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("TEXT");
+
+                    b.Property<long>("TelegramUserId")
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("GamingDayAnchor", "TelegramUserId")
+                        .IsUnique();
+
+                    b.ToTable("DailyBets");
+                });
+
+            modelBuilder.Entity("left_4_bot.Persistence.DailyMarket", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateOnly>("GamingDayAnchor")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("GamingDayAnchor")
+                        .IsUnique();
+
+                    b.ToTable("DailyMarkets");
+                });
+
             modelBuilder.Entity("left_4_bot.Persistence.Player", b =>
                 {
                     b.Property<long>("Id")
