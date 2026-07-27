@@ -21,6 +21,7 @@ public static class ServerLogSyncServiceCollectionExtensions
         services.AddSingleton<ServerLogSyncService>();
         services.AddSingleton<FriendlyFireStatsService>();
         services.AddSingleton<ProtectTeammateStatsService>();
+        services.AddSingleton<IProtectTeammateDayStatsLoader, ProtectTeammateDayStatsLoader>();
         services.AddSingleton<PlayStatsService>();
         services.AddHostedService<ServerLogTailHostedService>();
 

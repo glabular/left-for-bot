@@ -19,6 +19,7 @@ public static class PersistenceServiceCollectionExtensions
 
         services.AddSingleton<PlayersService>();
         services.AddSingleton<BettingService>();
+        services.AddSingleton<BetSettlementService>();
 
         return services;
     }

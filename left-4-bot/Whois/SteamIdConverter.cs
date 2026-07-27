@@ -73,4 +73,20 @@ public static class SteamIdConverter
 
         return true;
     }
+
+    /// <summary>
+    /// Normalizes a classic Source ID to <c>STEAM_1:Y:Z</c>.
+    /// <c>STEAM_0</c> and <c>STEAM_1</c> for the same Y:Z map to the same account.
+    /// </summary>
+    public static bool TryToCanonicalClassic(string classicSteamId, out string canonical)
+    {
+        canonical = string.Empty;
+
+        if (!TryToSteam64(classicSteamId, out var steam64))
+        {
+            return false;
+        }
+
+        return TryFromSteam64(steam64, out canonical);
+    }
 }
