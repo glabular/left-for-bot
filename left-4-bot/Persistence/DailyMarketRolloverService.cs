@@ -12,6 +12,7 @@ public sealed class DailyMarketRolloverService
 {
     private readonly IDbContextFactory<BotDbContext> _dbFactory;
     private readonly BetSettlementService _settlement;
+    private readonly IMarketChatNotifier _notifier;
     private readonly GamingDayOptions _gamingDayOptions;
     private readonly ILogger<DailyMarketRolloverService> _logger;
 
@@ -20,11 +21,13 @@ public sealed class DailyMarketRolloverService
     public DailyMarketRolloverService(
         IDbContextFactory<BotDbContext> dbFactory,
         BetSettlementService settlement,
+        IMarketChatNotifier notifier,
         IOptions<GamingDayOptions> gamingDayOptions,
         ILogger<DailyMarketRolloverService> logger)
     {
         _dbFactory = dbFactory;
         _settlement = settlement;
+        _notifier = notifier;
         _gamingDayOptions = gamingDayOptions.Value;
         _logger = logger;
     }
@@ -59,9 +62,47 @@ public sealed class DailyMarketRolloverService
                 result.Status,
                 result.CancelReason,
                 result.Bank);
+
+            await _notifier.TryAnnounceSettlementAsync(result, cancellationToken);
         }
 
         await EnsureCurrentMarketOpenAsync(current, cancellationToken);
+        await _notifier.TryAnnounceOpenAsync(current, cancellationToken);
+
+        await MaybeAnnounceWindowMessagesAsync(current, cancellationToken);
+    }
+
+    private async Task MaybeAnnounceWindowMessagesAsync(
+        DateOnly current,
+        CancellationToken cancellationToken)
+    {
+        await using var db = await _dbFactory.CreateDbContextAsync(cancellationToken);
+
+        var market = await db.DailyMarkets
+            .AsNoTracking()
+            .FirstOrDefaultAsync(m => m.GamingDayAnchor == current, cancellationToken);
+
+        if (market is null || market.Status != DailyMarketStatus.Open)
+        {
+            return;
+        }
+
+        var bank = await db.DailyBets
+            .AsNoTracking()
+            .Where(b => b.GamingDayAnchor == current)
+            .SumAsync(b => (int?)b.Amount, cancellationToken) ?? 0;
+
+        var hour = GamingDay.NowMoscow().Hour;
+
+        if (hour >= ToteEconomy.BetReminderHourMsk && hour < ToteEconomy.BetWindowCloseHourMsk)
+        {
+            await _notifier.TryAnnounceReminderAsync(current, bank, cancellationToken);
+        }
+
+        if (hour >= ToteEconomy.BetWindowCloseHourMsk)
+        {
+            await _notifier.TryAnnounceCloseAsync(current, bank, cancellationToken);
+        }
     }
 
     private async Task<IReadOnlyList<DateOnly>> FindUnsettledPastAnchorsAsync(

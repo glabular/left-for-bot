@@ -10,4 +10,12 @@ public sealed class DailyMarket
     public DateOnly GamingDayAnchor { get; set; }
 
     public DailyMarketStatus Status { get; set; }
+
+    public bool OpenAnnounced { get; set; }
+
+    public bool ReminderAnnounced { get; set; }
+
+    public bool CloseAnnounced { get; set; }
+
+    public bool SettlementAnnounced { get; set; }
 }

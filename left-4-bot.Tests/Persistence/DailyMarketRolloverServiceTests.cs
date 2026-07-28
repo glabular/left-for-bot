@@ -130,6 +130,7 @@ public sealed class DailyMarketRolloverServiceTests
         return new DailyMarketRolloverService(
             db.Factory,
             settlement,
+            new RecordingMarketChatNotifier(db.Factory),
             Options.Create(SettlementTestData.GamingDayOptions),
             NullLogger<DailyMarketRolloverService>.Instance);
     }

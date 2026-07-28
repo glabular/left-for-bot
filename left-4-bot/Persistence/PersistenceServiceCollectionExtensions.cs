@@ -20,6 +20,7 @@ public static class PersistenceServiceCollectionExtensions
         services.AddSingleton<PlayersService>();
         services.AddSingleton<BettingService>();
         services.AddSingleton<BetSettlementService>();
+        services.AddSingleton<IMarketChatNotifier, MarketChatNotifier>();
         services.AddSingleton<DailyMarketRolloverService>();
         services.AddHostedService<DailyMarketRolloverHostedService>();
 

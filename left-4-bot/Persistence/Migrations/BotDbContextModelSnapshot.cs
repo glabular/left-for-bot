@@ -51,8 +51,20 @@ namespace left_4_bot.Persistence.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("INTEGER");
 
+                    b.Property<bool>("CloseAnnounced")
+                        .HasColumnType("INTEGER");
+
                     b.Property<DateOnly>("GamingDayAnchor")
                         .HasColumnType("TEXT");
+
+                    b.Property<bool>("OpenAnnounced")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<bool>("ReminderAnnounced")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<bool>("SettlementAnnounced")
+                        .HasColumnType("INTEGER");
 
                     b.Property<int>("Status")
                         .HasColumnType("INTEGER");
