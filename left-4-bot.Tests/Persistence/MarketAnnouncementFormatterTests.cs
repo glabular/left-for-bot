@@ -10,6 +10,7 @@ public sealed class MarketAnnouncementFormatterTests
         var text = MarketAnnouncementFormatter.FormatOpen(18, 1000);
 
         Assert.Contains("⚠️ Тотализатор в разработке", text);
+        Assert.EndsWith("⚠️ Тотализатор в разработке", text.TrimEnd());
         Assert.Contains("Сегодняшний рынок открыт.", text);
         Assert.Contains(BettingMarket.CategoryTitle, text);
         Assert.Contains("Ставки до 18:00 МСК.", text);
@@ -22,6 +23,7 @@ public sealed class MarketAnnouncementFormatterTests
         var text = MarketAnnouncementFormatter.FormatReminder(18, 250);
 
         Assert.Contains("⚠️ Тотализатор в разработке", text);
+        Assert.EndsWith("⚠️ Тотализатор в разработке", text.TrimEnd());
         Assert.Contains("до 18:00 МСК", text);
         Assert.Contains("Банк сейчас: 250 таблов.", text);
     }

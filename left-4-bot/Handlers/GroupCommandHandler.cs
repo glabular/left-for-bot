@@ -948,28 +948,22 @@ public sealed class GroupCommandHandler
         var reply = result.Status switch
         {
             BalanceClaimStatus.NeedLink =>
-                """
-                ⚠️ Тотализатор в разработке
-
-                Сначала привяжи Steam:
-                    /link &lt;ссылка на профиль Steam&gt;
-                """,
+                WithToteFooter(
+                    """
+                    Сначала привяжи Steam:
+                        /link &lt;ссылка на профиль Steam&gt;
+                    """),
             BalanceClaimStatus.Joined =>
-                $"""
-                ⚠️ Тотализатор в разработке
+                WithToteFooter(
+                    $"""
+                    🎉 Поздравляем! 🎉
 
-                🎉 Поздравляем! 🎉
-
-                На счёт зачислено {ToteEconomy.StarterTabs} таблов 💊 💊 💊 
-                💰 Текущий баланс: {result.Balance} таблов.
-                """,
+                    На счёт зачислено {ToteEconomy.StarterTabs} таблов 💊 💊 💊 
+                    💰 Текущий баланс: {result.Balance} таблов.
+                    """),
             BalanceClaimStatus.AlreadyJoined =>
-                $"""
-                ⚠️ Тотализатор в разработке
-
-                💰 Твой текущий баланс: {result.Balance} таблов.
-                """,
-            _ => "⚠️ Тотализатор в разработке\n\nНе удалось получить баланс.",
+                WithToteFooter($"💰 Твой текущий баланс: {result.Balance} таблов."),
+            _ => WithToteFooter("Не удалось получить баланс."),
         };
 
         await bot.SendMessage(
@@ -988,6 +982,11 @@ public sealed class GroupCommandHandler
         Отменить ставку:
             /bet cancel
         """;
+
+    private const string ToteInDevelopmentFooter = "⚠️ Тотализатор в разработке";
+
+    private static string WithToteFooter(string body) =>
+        $"{body.TrimEnd()}\n\n{ToteInDevelopmentFooter}";
 
     private static string BetDayIntroText =>
         $"Сейчас можно поставить таблы на то, кто займёт 1 место по «{BettingMarket.CategoryTitle}» за игровой день.";
@@ -1116,8 +1115,6 @@ public sealed class GroupCommandHandler
         IReadOnlyDictionary<string, string> displayNames)
     {
         var builder = new System.Text.StringBuilder();
-        builder.AppendLine("⚠️ Тотализатор в разработке");
-        builder.AppendLine();
 
         // The market description belongs to the plain /bet help only, not to error replies.
         if (string.IsNullOrEmpty(errorLine))
@@ -1156,6 +1153,8 @@ public sealed class GroupCommandHandler
 
         builder.AppendLine();
         builder.Append(BetMiniHelpText);
+        builder.AppendLine();
+        builder.AppendLine(ToteInDevelopmentFooter);
         return builder.ToString();
     }
 
@@ -1174,129 +1173,103 @@ public sealed class GroupCommandHandler
         BetActionResult result,
         IReadOnlyDictionary<string, string> displayNames)
     {
-        var header = "⚠️ Тотализатор в разработке";
-
         switch (result.Status)
         {
             case BetActionStatus.Placed:
-                return
+                return WithToteFooter(
                     $"""
-                    {header}
-
                     Готово! Ты поставил {result.Bet!.Amount} таблов на то, что {FormatTargetLabel(result.Bet.TargetSteamId, result.PriorityTargets, displayNames)} займёт 1 место по «{BettingMarket.CategoryTitle}».
                     Остаток на счёте: {result.Balance} таблов.
-                    """;
+                    """);
 
             case BetActionStatus.Replaced:
-                return
+                return WithToteFooter(
                     $"""
-                    {header}
-
                     Ставка обновлена: {result.Bet!.Amount} таблов на то, что {FormatTargetLabel(result.Bet.TargetSteamId, result.PriorityTargets, displayNames)} займёт 1 место по «{BettingMarket.CategoryTitle}».
                     Остаток на счёте: {result.Balance} таблов.
-                    """;
+                    """);
 
             case BetActionStatus.Cancelled:
-                return
+                return WithToteFooter(
                     $"""
-                    {header}
-
                     Ставка отменена. {result.Bet!.Amount} таблов вернулись на счёт.
                     Сейчас на счёте: {result.Balance} таблов.
-                    """;
+                    """);
 
             case BetActionStatus.NeedLink:
-                return
+                return WithToteFooter(
                     $"""
-                    {header}
-
                     Сначала привяжи Steam:
                         /link <ссылка на профиль Steam>
 
                     {BetMiniHelpText}
-                    """;
+                    """);
 
             case BetActionStatus.NeedStarter:
-                return
+                return WithToteFooter(
                     $"""
-                    {header}
-
                     Сначала получи стартовые таблы:
                         /balance
 
                     {BetMiniHelpText}
-                    """;
+                    """);
 
             case BetActionStatus.WindowClosed:
-                return
+                return WithToteFooter(
                     $"""
-                    {header}
-
                     Приём ставок уже закрыт (после {ToteEconomy.BetWindowCloseHourMsk}:00 по Москве).
                     Ждём итог игрового дня по «{BettingMarket.CategoryTitle}».
 
                     {BetMiniHelpText}
-                    """;
+                    """);
 
             case BetActionStatus.NoPriorityTargets:
-                return
+                return WithToteFooter(
                     $"""
-                    {header}
-
                     Пока некого выбрать: в приоритетном списке никого нет.
 
                     {BetMiniHelpText}
-                    """;
+                    """);
 
             case BetActionStatus.NothingToCancel:
-                return
+                return WithToteFooter(
                     $"""
-                    {header}
-
                     У тебя нет активной ставки, которую можно отменить.
 
                     {FormatTargetsAndHelp(result.PriorityTargets, result.Bet, displayNames)}
-                    """;
+                    """);
 
             case BetActionStatus.InvalidTargetIndex:
-                return
+                return WithToteFooter(
                     $"""
-                    {header}
-
                     Такого номера в списке нет. Возьми номер из списка ниже.
 
                     {FormatTargetsAndHelp(result.PriorityTargets, result.Bet, displayNames)}
-                    """;
+                    """);
 
             case BetActionStatus.InvalidAmount:
-                return
+                return WithToteFooter(
                     $"""
-                    {header}
-
                     Сумма должна быть целым числом от {ToteEconomy.MinBetTabs} таблов.
 
                     {FormatTargetsAndHelp(result.PriorityTargets, result.Bet, displayNames)}
-                    """;
+                    """);
 
             case BetActionStatus.InsufficientBalance:
-                return
+                return WithToteFooter(
                     $"""
-                    {header}
-
                     Не хватает таблов (сейчас на счёте: {result.Balance}).
 
                     {FormatTargetsAndHelp(result.PriorityTargets, result.Bet, displayNames)}
-                    """;
+                    """);
 
             default:
-                return
+                return WithToteFooter(
                     $"""
-                    {header}
-
                     Не удалось обработать ставку.
 
                     {BetMiniHelpText}
-                    """;
+                    """);
         }
     }
 
@@ -1384,14 +1357,12 @@ public sealed class GroupCommandHandler
             return;
         }
 
-        var text =
+        var text = WithToteFooter(
             $"""
-            ⚠️ Тотализатор в разработке
-
             {result.RewardsUsedToday}/{ToteEconomy.CommandRewardsPerGamingDay} наград за сегодня за использование команд получены.
             Начислено за сегодня: {result.TabsGrantedToday} таблов.
             Общий баланс: {result.Balance} таблов.
-            """;
+            """);
 
         await bot.SendMessage(
             message.Chat.Id,
