@@ -1250,7 +1250,7 @@ public sealed class GroupCommandHandler
             case BetActionStatus.InvalidAmount:
                 return WithToteFooter(
                     $"""
-                    Сумма должна быть целым числом от {ToteEconomy.MinBetTabs} таблов.
+                    Минимальная ставка — {ToteEconomy.MinBetTabs} таблов.
 
                     {FormatTargetsAndHelp(result.PriorityTargets, result.Bet, displayNames)}
                     """);

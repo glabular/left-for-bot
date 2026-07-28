@@ -28,7 +28,7 @@ public static class ToteEconomy
     /// <summary>
     /// Minimum single bet in Tabs.
     /// </summary>
-    public const int MinBetTabs = 1;
+    public const int MinBetTabs = 50;
 
     /// <summary>
     /// Moscow hour (UTC+3) when the betting window closes.
