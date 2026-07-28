@@ -121,6 +121,11 @@ public sealed class BettingService
                 return Fail(BetActionStatus.WindowClosed, targets, player.Balance);
             }
 
+            if (market is not null && market.CloseAnnounced)
+            {
+                return Fail(BetActionStatus.WindowClosed, targets, player.Balance);
+            }
+
             var previous = await db.DailyBets
                 .FirstOrDefaultAsync(
                     b => b.GamingDayAnchor == today && b.TelegramUserId == telegramUserId,
@@ -229,6 +234,21 @@ public sealed class BettingService
                 .FirstOrDefaultAsync(m => m.GamingDayAnchor == today, cancellationToken);
 
             if (market is not null && market.Status != DailyMarketStatus.Open)
+            {
+                var lockedBet = await db.DailyBets
+                    .AsNoTracking()
+                    .FirstOrDefaultAsync(
+                        b => b.GamingDayAnchor == today && b.TelegramUserId == telegramUserId,
+                        cancellationToken);
+
+                return new BetActionResult(
+                    BetActionStatus.WindowClosed,
+                    lockedBet,
+                    player.Balance,
+                    targets);
+            }
+
+            if (market is not null && market.CloseAnnounced)
             {
                 var lockedBet = await db.DailyBets
                     .AsNoTracking()

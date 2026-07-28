@@ -1,4 +1,5 @@
-﻿using Microsoft.EntityFrameworkCore;
+﻿using left_4_bot.ServerLogs;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace left_4_bot.Persistence;
@@ -23,6 +24,7 @@ public static class PersistenceServiceCollectionExtensions
         services.AddSingleton<IMarketChatNotifier, MarketChatNotifier>();
         services.AddSingleton<DailyMarketRolloverService>();
         services.AddHostedService<DailyMarketRolloverHostedService>();
+        services.AddSingleton<IServerLogTailConsumer, BettingEarlyCloseLogTailConsumer>();
 
         return services;
     }

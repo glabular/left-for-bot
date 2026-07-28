@@ -58,7 +58,10 @@ public sealed class MarketChatNotifier : IMarketChatNotifier
         var market = await db.DailyMarkets
             .FirstOrDefaultAsync(m => m.GamingDayAnchor == gamingDayAnchor, cancellationToken);
 
-        if (market is null || market.Status != DailyMarketStatus.Open || market.ReminderAnnounced)
+        if (market is null
+            || market.Status != DailyMarketStatus.Open
+            || market.ReminderAnnounced
+            || market.CloseAnnounced)
         {
             return;
         }
@@ -98,6 +101,42 @@ public sealed class MarketChatNotifier : IMarketChatNotifier
         }
 
         market.CloseAnnounced = true;
+        await db.SaveChangesAsync(cancellationToken);
+    }
+
+    public async Task TryAnnounceGameStartedCloseAsync(
+        DateOnly gamingDayAnchor,
+        int bank,
+        CancellationToken cancellationToken)
+    {
+        await using var db = await _dbFactory.CreateDbContextAsync(cancellationToken);
+        var market = await db.DailyMarkets
+            .FirstOrDefaultAsync(m => m.GamingDayAnchor == gamingDayAnchor, cancellationToken);
+
+        if (market is null)
+        {
+            market = new DailyMarket
+            {
+                GamingDayAnchor = gamingDayAnchor,
+                Status = DailyMarketStatus.Open,
+            };
+            db.DailyMarkets.Add(market);
+        }
+
+        if (market.Status != DailyMarketStatus.Open || market.CloseAnnounced)
+        {
+            return;
+        }
+
+        var text = MarketAnnouncementFormatter.FormatGameStartedClose(bank);
+
+        if (!await TrySendAsync(text, cancellationToken))
+        {
+            return;
+        }
+
+        market.CloseAnnounced = true;
+        market.ReminderAnnounced = true;
         await db.SaveChangesAsync(cancellationToken);
     }
 

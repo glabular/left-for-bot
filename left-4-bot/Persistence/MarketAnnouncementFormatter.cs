@@ -45,6 +45,18 @@ public static class MarketAnnouncementFormatter
             """);
     }
 
+    public static string FormatGameStartedClose(int bank)
+    {
+        return WithFooter(
+            $"""
+            Окно ставок закрыто автоматически — игра началась.
+            На сервере появились приоритетные игроки.
+            Категория: {BettingMarket.CategoryTitle}
+            Банк: {bank} таблов.
+            Итог — по статистике игрового дня.
+            """);
+    }
+
     public static string FormatSettled(
         IReadOnlyList<string> topPlayerLabels,
         IReadOnlyList<string> winnerLines,

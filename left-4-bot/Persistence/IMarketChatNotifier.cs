@@ -11,5 +11,10 @@ public interface IMarketChatNotifier
 
     Task TryAnnounceCloseAsync(DateOnly gamingDayAnchor, int bank, CancellationToken cancellationToken);
 
+    Task TryAnnounceGameStartedCloseAsync(
+        DateOnly gamingDayAnchor,
+        int bank,
+        CancellationToken cancellationToken);
+
     Task TryAnnounceSettlementAsync(BetSettlementResult result, CancellationToken cancellationToken);
 }
