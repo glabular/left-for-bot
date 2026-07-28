@@ -43,7 +43,7 @@ public sealed class MarketAnnouncementRolloverTests
     {
         if (GamingDay.NowMoscow().Hour < ToteEconomy.BetWindowCloseHourMsk)
         {
-            return; // wall-clock gate; covered when run after 18:00 MSK
+            return; // wall-clock gate; covered when run after BetWindowCloseHourMsk
         }
 
         using var db = new SqliteTestDb();

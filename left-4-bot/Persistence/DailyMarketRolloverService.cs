@@ -77,7 +77,7 @@ public sealed class DailyMarketRolloverService
         }
         else
         {
-            // Late start after 18:00 MSK: do not spam "open" then "closed" in one tick.
+            // Late start after BetWindowCloseHourMsk: do not spam "open" then "closed" in one tick.
             await SuppressUnannouncedWindowFlagsAsync(current, cancellationToken);
         }
 

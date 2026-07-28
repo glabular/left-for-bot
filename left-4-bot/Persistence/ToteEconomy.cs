@@ -33,7 +33,7 @@ public static class ToteEconomy
     /// <summary>
     /// Moscow hour (UTC+3) when the betting window closes.
     /// </summary>
-    public const int BetWindowCloseHourMsk = 18;
+    public const int BetWindowCloseHourMsk = 20;
 
     /// <summary>
     /// Moscow hour when the "bets still open" reminder is sent (before close).

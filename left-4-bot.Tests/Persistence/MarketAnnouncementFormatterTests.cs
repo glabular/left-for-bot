@@ -7,24 +7,24 @@ public sealed class MarketAnnouncementFormatterTests
     [Fact]
     public void FormatOpen_ContainsWarningDeadlineAndCategory()
     {
-        var text = MarketAnnouncementFormatter.FormatOpen(18);
+        var text = MarketAnnouncementFormatter.FormatOpen(ToteEconomy.BetWindowCloseHourMsk);
 
         Assert.Contains("⚠️ Тотализатор в разработке", text);
         Assert.EndsWith("⚠️ Тотализатор в разработке", text.TrimEnd());
         Assert.Contains("Сегодняшний рынок открыт.", text);
         Assert.Contains(BettingMarket.CategoryTitle, text);
-        Assert.Contains("Ставки до 18:00 МСК.", text);
+        Assert.Contains($"Ставки до {ToteEconomy.BetWindowCloseHourMsk}:00 МСК.", text);
         Assert.DoesNotContain("Старт баланса", text);
     }
 
     [Fact]
     public void FormatReminder_ContainsBankAndDeadline()
     {
-        var text = MarketAnnouncementFormatter.FormatReminder(18, 250);
+        var text = MarketAnnouncementFormatter.FormatReminder(ToteEconomy.BetWindowCloseHourMsk, 250);
 
         Assert.Contains("⚠️ Тотализатор в разработке", text);
         Assert.EndsWith("⚠️ Тотализатор в разработке", text.TrimEnd());
-        Assert.Contains("до 18:00 МСК", text);
+        Assert.Contains($"до {ToteEconomy.BetWindowCloseHourMsk}:00 МСК", text);
         Assert.Contains("Банк сейчас: 250 таблов.", text);
     }
 

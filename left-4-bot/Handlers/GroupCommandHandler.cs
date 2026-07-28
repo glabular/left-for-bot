@@ -59,6 +59,7 @@ public sealed class GroupCommandHandler
         ⚠️ <b>Тотализатор (в разработке)</b>
         /balance — баланс таблов.
         /bet — рынок (топ-1, Защита союзников): список целей и ставка.
+        /bet FAQ — частые вопросы по тотализатору.
 
         ℹ️ <b>Справка</b>
         /help — эта справка.
@@ -981,6 +982,9 @@ public sealed class GroupCommandHandler
 
         Отменить ставку:
             /bet cancel
+
+        Частые вопросы:
+            /bet FAQ
         """;
 
     private const string ToteInDevelopmentFooter = "⚠️ Тотализатор в разработке";
@@ -1008,6 +1012,15 @@ public sealed class GroupCommandHandler
         if (string.IsNullOrEmpty(trimmed))
         {
             await SendBetListAsync(bot, message, telegramUserId, errorLine: null, cancellationToken);
+            return;
+        }
+
+        if (trimmed.Equals("FAQ", StringComparison.OrdinalIgnoreCase))
+        {
+            await bot.SendMessage(
+                message.Chat.Id,
+                BetFaqText.Build(),
+                cancellationToken: cancellationToken);
             return;
         }
 
