@@ -38,8 +38,7 @@ public sealed class MarketChatNotifier : IMarketChatNotifier
         }
 
         var text = MarketAnnouncementFormatter.FormatOpen(
-            ToteEconomy.BetWindowCloseHourMsk,
-            ToteEconomy.StarterTabs);
+            ToteEconomy.BetWindowCloseHourMsk);
 
         if (!await TrySendAsync(text, cancellationToken))
         {

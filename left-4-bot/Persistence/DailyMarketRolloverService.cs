@@ -67,9 +67,50 @@ public sealed class DailyMarketRolloverService
         }
 
         await EnsureCurrentMarketOpenAsync(current, cancellationToken);
-        await _notifier.TryAnnounceOpenAsync(current, cancellationToken);
+
+        var hour = GamingDay.NowMoscow().Hour;
+        var bettingWindowOpen = hour < ToteEconomy.BetWindowCloseHourMsk;
+
+        if (bettingWindowOpen)
+        {
+            await _notifier.TryAnnounceOpenAsync(current, cancellationToken);
+        }
+        else
+        {
+            // Late start after 18:00 MSK: do not spam "open" then "closed" in one tick.
+            await SuppressUnannouncedWindowFlagsAsync(current, cancellationToken);
+        }
 
         await MaybeAnnounceWindowMessagesAsync(current, cancellationToken);
+    }
+
+    /// <summary>
+    /// When the bot first sees today's market after the betting window already closed,
+    /// mark open/reminder/close as announced without sending — otherwise the group gets
+    /// both "market open" and "bets closed" back-to-back.
+    /// </summary>
+    private async Task SuppressUnannouncedWindowFlagsAsync(
+        DateOnly current,
+        CancellationToken cancellationToken)
+    {
+        await using var db = await _dbFactory.CreateDbContextAsync(cancellationToken);
+
+        var market = await db.DailyMarkets
+            .FirstOrDefaultAsync(m => m.GamingDayAnchor == current, cancellationToken);
+
+        if (market is null || market.Status != DailyMarketStatus.Open || market.OpenAnnounced)
+        {
+            return;
+        }
+
+        market.OpenAnnounced = true;
+        market.ReminderAnnounced = true;
+        market.CloseAnnounced = true;
+        await db.SaveChangesAsync(cancellationToken);
+
+        _logger.LogInformation(
+            "Skipped open/close announcements for {Anchor}: betting window already closed",
+            current);
     }
 
     private async Task MaybeAnnounceWindowMessagesAsync(
@@ -99,7 +140,7 @@ public sealed class DailyMarketRolloverService
             await _notifier.TryAnnounceReminderAsync(current, bank, cancellationToken);
         }
 
-        if (hour >= ToteEconomy.BetWindowCloseHourMsk)
+        if (hour >= ToteEconomy.BetWindowCloseHourMsk && market.OpenAnnounced)
         {
             await _notifier.TryAnnounceCloseAsync(current, bank, cancellationToken);
         }

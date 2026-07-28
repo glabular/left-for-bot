@@ -7,14 +7,14 @@ public sealed class MarketAnnouncementFormatterTests
     [Fact]
     public void FormatOpen_ContainsWarningDeadlineAndCategory()
     {
-        var text = MarketAnnouncementFormatter.FormatOpen(18, 1000);
+        var text = MarketAnnouncementFormatter.FormatOpen(18);
 
         Assert.Contains("⚠️ Тотализатор в разработке", text);
         Assert.EndsWith("⚠️ Тотализатор в разработке", text.TrimEnd());
         Assert.Contains("Сегодняшний рынок открыт.", text);
         Assert.Contains(BettingMarket.CategoryTitle, text);
         Assert.Contains("Ставки до 18:00 МСК.", text);
-        Assert.Contains("1000 таблов", text);
+        Assert.DoesNotContain("Старт баланса", text);
     }
 
     [Fact]
@@ -36,6 +36,8 @@ public sealed class MarketAnnouncementFormatterTests
         Assert.Contains("Ставки закрыты.", text);
         Assert.Contains("Банк: 400 таблов.", text);
         Assert.Contains(BettingMarket.CategoryTitle, text);
+        Assert.Contains("Итог — по статистике игрового дня.", text);
+        Assert.DoesNotContain("gaming day", text);
     }
 
     [Fact]

@@ -29,8 +29,7 @@ public sealed class RecordingMarketChatNotifier : IMarketChatNotifier
         }
 
         Messages.Add(MarketAnnouncementFormatter.FormatOpen(
-            ToteEconomy.BetWindowCloseHourMsk,
-            ToteEconomy.StarterTabs));
+            ToteEconomy.BetWindowCloseHourMsk));
         market.OpenAnnounced = true;
         await db.SaveChangesAsync(cancellationToken);
     }

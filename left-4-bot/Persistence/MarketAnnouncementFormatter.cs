@@ -12,14 +12,13 @@ public static class MarketAnnouncementFormatter
     private static string WithFooter(string body) =>
         $"{body.TrimEnd()}\n\n{InDevelopmentFooter}";
 
-    public static string FormatOpen(int deadlineHourMsk, int starterTabs)
+    public static string FormatOpen(int deadlineHourMsk)
     {
         return WithFooter(
             $"""
             Сегодняшний рынок открыт.
             Категория: {BettingMarket.CategoryTitle}
             Ставки до {deadlineHourMsk}:00 МСК.
-            Старт баланса новичкам: {starterTabs} таблов.
 
             Ставьте на топ-1 в этой категории (только приоритетные игроки).
             """);
@@ -42,7 +41,7 @@ public static class MarketAnnouncementFormatter
             Ставки закрыты.
             Категория: {BettingMarket.CategoryTitle}
             Банк: {bank} таблов.
-            Итог — по статистике gaming day.
+            Итог — по статистике игрового дня.
             """);
     }
 

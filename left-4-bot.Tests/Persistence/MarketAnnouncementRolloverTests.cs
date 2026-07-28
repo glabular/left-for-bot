@@ -10,8 +10,42 @@ namespace left_4_bot.Tests.Persistence;
 public sealed class MarketAnnouncementRolloverTests
 {
     [Fact]
-    public async Task Tick_AnnouncesOpenOnce()
+    public async Task Tick_AnnouncesOpenOnce_WhenBettingWindowOpen()
     {
+        using var db = new SqliteTestDb();
+        var loader = new FakeProtectTeammateStatsLoader();
+        var notifier = new RecordingMarketChatNotifier(db.Factory);
+        var rollover = CreateRollover(db, loader, notifier);
+        var current = GamingDay.GetCurrentAnchor(SettlementTestData.GamingDayOptions);
+        var hour = GamingDay.NowMoscow().Hour;
+
+        await rollover.TickAsync(CancellationToken.None);
+        await rollover.TickAsync(CancellationToken.None);
+
+        Assert.Equal(DailyMarketStatus.Open, await db.GetMarketStatusAsync(current));
+
+        if (hour < ToteEconomy.BetWindowCloseHourMsk)
+        {
+            Assert.Single(notifier.Messages, m => m.Contains("Сегодняшний рынок открыт."));
+            Assert.True(await IsFlagAsync(db, current, m => m.OpenAnnounced));
+        }
+        else
+        {
+            Assert.DoesNotContain(notifier.Messages, m => m.Contains("Сегодняшний рынок открыт."));
+            Assert.DoesNotContain(notifier.Messages, m => m.Contains("Ставки закрыты."));
+            Assert.True(await IsFlagAsync(db, current, m => m.OpenAnnounced));
+            Assert.True(await IsFlagAsync(db, current, m => m.CloseAnnounced));
+        }
+    }
+
+    [Fact]
+    public async Task Tick_AfterCloseHour_DoesNotAnnounceOpenAndCloseTogether()
+    {
+        if (GamingDay.NowMoscow().Hour < ToteEconomy.BetWindowCloseHourMsk)
+        {
+            return; // wall-clock gate; covered when run after 18:00 MSK
+        }
+
         using var db = new SqliteTestDb();
         var loader = new FakeProtectTeammateStatsLoader();
         var notifier = new RecordingMarketChatNotifier(db.Factory);
@@ -19,11 +53,11 @@ public sealed class MarketAnnouncementRolloverTests
         var current = GamingDay.GetCurrentAnchor(SettlementTestData.GamingDayOptions);
 
         await rollover.TickAsync(CancellationToken.None);
-        await rollover.TickAsync(CancellationToken.None);
 
-        Assert.Equal(DailyMarketStatus.Open, await db.GetMarketStatusAsync(current));
-        Assert.Single(notifier.Messages, m => m.Contains("Сегодняшний рынок открыт."));
+        Assert.DoesNotContain(notifier.Messages, m => m.Contains("Сегодняшний рынок открыт."));
+        Assert.DoesNotContain(notifier.Messages, m => m.Contains("Ставки закрыты."));
         Assert.True(await IsFlagAsync(db, current, m => m.OpenAnnounced));
+        Assert.True(await IsFlagAsync(db, current, m => m.CloseAnnounced));
     }
 
     [Fact]
