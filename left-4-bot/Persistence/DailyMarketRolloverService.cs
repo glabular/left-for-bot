@@ -128,20 +128,15 @@ public sealed class DailyMarketRolloverService
             return;
         }
 
-        var bank = await db.DailyBets
-            .AsNoTracking()
-            .Where(b => b.GamingDayAnchor == current)
-            .SumAsync(b => (int?)b.Amount, cancellationToken) ?? 0;
-
         var hour = GamingDay.NowMoscow().Hour;
-
-        if (hour >= ToteEconomy.BetReminderHourMsk && hour < ToteEconomy.BetWindowCloseHourMsk)
-        {
-            await _notifier.TryAnnounceReminderAsync(current, bank, cancellationToken);
-        }
 
         if (hour >= ToteEconomy.BetWindowCloseHourMsk && market.OpenAnnounced)
         {
+            var bank = await db.DailyBets
+                .AsNoTracking()
+                .Where(b => b.GamingDayAnchor == current)
+                .SumAsync(b => (int?)b.Amount, cancellationToken) ?? 0;
+
             await _notifier.TryAnnounceCloseAsync(current, bank, cancellationToken);
         }
     }

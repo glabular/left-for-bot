@@ -41,7 +41,6 @@ public static class MarketAnnouncementFormatter
             Ставки закрыты.
             Категория: {BettingMarket.CategoryTitle}
             Банк: {bank} таблов.
-            Итог — по статистике игрового дня.
             """);
     }
 
@@ -53,7 +52,6 @@ public static class MarketAnnouncementFormatter
             На сервере появились приоритетные игроки.
             Категория: {BettingMarket.CategoryTitle}
             Банк: {bank} таблов.
-            Итог — по статистике игрового дня.
             """);
     }
 

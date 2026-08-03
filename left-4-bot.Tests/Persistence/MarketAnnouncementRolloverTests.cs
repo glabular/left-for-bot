@@ -10,7 +10,7 @@ namespace left_4_bot.Tests.Persistence;
 public sealed class MarketAnnouncementRolloverTests
 {
     [Fact]
-    public async Task Tick_AnnouncesOpenOnce_WhenBettingWindowOpen()
+    public async Task Tick_MarksOpenAnnouncedWithoutSending_WhenBettingWindowOpen()
     {
         using var db = new SqliteTestDb();
         var loader = new FakeProtectTeammateStatsLoader();
@@ -23,16 +23,14 @@ public sealed class MarketAnnouncementRolloverTests
         await rollover.TickAsync(CancellationToken.None);
 
         Assert.Equal(DailyMarketStatus.Open, await db.GetMarketStatusAsync(current));
+        Assert.Empty(notifier.Announcements);
 
         if (hour < ToteEconomy.BetWindowCloseHourMsk)
         {
-            Assert.Single(notifier.Messages, m => m.Contains("Сегодняшний рынок открыт."));
             Assert.True(await IsFlagAsync(db, current, m => m.OpenAnnounced));
         }
         else
         {
-            Assert.DoesNotContain(notifier.Messages, m => m.Contains("Сегодняшний рынок открыт."));
-            Assert.DoesNotContain(notifier.Messages, m => m.Contains("Ставки закрыты."));
             Assert.True(await IsFlagAsync(db, current, m => m.OpenAnnounced));
             Assert.True(await IsFlagAsync(db, current, m => m.CloseAnnounced));
         }
@@ -54,10 +52,43 @@ public sealed class MarketAnnouncementRolloverTests
 
         await rollover.TickAsync(CancellationToken.None);
 
-        Assert.DoesNotContain(notifier.Messages, m => m.Contains("Сегодняшний рынок открыт."));
-        Assert.DoesNotContain(notifier.Messages, m => m.Contains("Ставки закрыты."));
+        Assert.Empty(notifier.Announcements);
         Assert.True(await IsFlagAsync(db, current, m => m.OpenAnnounced));
         Assert.True(await IsFlagAsync(db, current, m => m.CloseAnnounced));
+    }
+
+    [Fact]
+    public async Task Close_AnnouncesOnlyWhenMinBettorsReached()
+    {
+        using var db = new SqliteTestDb();
+        var notifier = new RecordingMarketChatNotifier(db.Factory);
+        var anchor = SettlementTestData.PastAnchor;
+
+        SeedThreeBettors(db, anchor, SettlementTestData.SteamIdA);
+
+        await notifier.TryAnnounceCloseAsync(anchor, bank: 200, CancellationToken.None);
+
+        Assert.Equal(
+            [RecordedMarketAnnouncement.Close],
+            notifier.Announcements);
+        Assert.True(await IsFlagAsync(db, anchor, m => m.CloseAnnounced));
+    }
+
+    [Fact]
+    public async Task Close_SkipsMessageWhenTooFewBettors_ButMarksCloseAnnounced()
+    {
+        using var db = new SqliteTestDb();
+        var notifier = new RecordingMarketChatNotifier(db.Factory);
+        var anchor = SettlementTestData.PastAnchor;
+
+        db.SeedPlayer(SettlementTestData.User1, balance: 900);
+        db.SeedMarket(anchor, DailyMarketStatus.Open);
+        db.SeedBet(anchor, SettlementTestData.User1, SettlementTestData.SteamIdA, 100);
+
+        await notifier.TryAnnounceCloseAsync(anchor, bank: 100, CancellationToken.None);
+
+        Assert.Empty(notifier.Announcements);
+        Assert.True(await IsFlagAsync(db, anchor, m => m.CloseAnnounced));
     }
 
     [Fact]
@@ -73,11 +104,10 @@ public sealed class MarketAnnouncementRolloverTests
         loader.SetStats(past, SettlementTestData.HasData((SettlementTestData.SteamIdA, "A", 5)));
 
         await rollover.TickAsync(CancellationToken.None);
-        var settlementCount = notifier.Messages.Count(m => m.Contains("Итог рынка:"));
-        Assert.Equal(1, settlementCount);
+        Assert.Equal(1, notifier.Announcements.Count(a => a == RecordedMarketAnnouncement.Settled));
 
         await rollover.TickAsync(CancellationToken.None);
-        Assert.Equal(1, notifier.Messages.Count(m => m.Contains("Итог рынка:")));
+        Assert.Equal(1, notifier.Announcements.Count(a => a == RecordedMarketAnnouncement.Settled));
         Assert.True(await IsFlagAsync(db, past, m => m.SettlementAnnounced));
     }
 
@@ -98,7 +128,7 @@ public sealed class MarketAnnouncementRolloverTests
 
         await rollover.TickAsync(CancellationToken.None);
 
-        Assert.Contains(notifier.Messages, m => m.Contains("Рынок отменён. Ставки возвращены."));
+        Assert.Contains(RecordedMarketAnnouncement.Cancelled, notifier.Announcements);
         Assert.True(await IsFlagAsync(db, past, m => m.SettlementAnnounced));
     }
 
@@ -115,7 +145,7 @@ public sealed class MarketAnnouncementRolloverTests
 
         await rollover.TickAsync(CancellationToken.None);
 
-        Assert.DoesNotContain(notifier.Messages, m => m.Contains("Рынок отменён"));
+        Assert.DoesNotContain(RecordedMarketAnnouncement.Cancelled, notifier.Announcements);
         Assert.Equal(DailyMarketStatus.Cancelled, await db.GetMarketStatusAsync(past));
     }
 
@@ -133,8 +163,8 @@ public sealed class MarketAnnouncementRolloverTests
 
         await rollover.TickAsync(CancellationToken.None);
 
-        Assert.DoesNotContain(notifier.Messages, m => m.Contains("Итог рынка:"));
-        Assert.DoesNotContain(notifier.Messages, m => m.Contains("Рынок отменён"));
+        Assert.DoesNotContain(RecordedMarketAnnouncement.Settled, notifier.Announcements);
+        Assert.DoesNotContain(RecordedMarketAnnouncement.Cancelled, notifier.Announcements);
         Assert.Equal(DailyMarketStatus.Closed, await db.GetMarketStatusAsync(past));
         Assert.False(await IsFlagAsync(db, past, m => m.SettlementAnnounced));
     }

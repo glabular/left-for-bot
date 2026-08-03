@@ -36,7 +36,7 @@ public static class ToteEconomy
     public const int BetWindowCloseHourMsk = 20;
 
     /// <summary>
-    /// Moscow hour when the "bets still open" reminder is sent (before close).
+    /// Former Moscow hour for the "bets still open" reminder (no longer sent).
     /// </summary>
     public const int BetReminderHourMsk = 16;
 }

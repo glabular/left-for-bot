@@ -37,14 +37,7 @@ public sealed class MarketChatNotifier : IMarketChatNotifier
             return;
         }
 
-        var text = MarketAnnouncementFormatter.FormatOpen(
-            ToteEconomy.BetWindowCloseHourMsk);
-
-        if (!await TrySendAsync(text, cancellationToken))
-        {
-            return;
-        }
-
+        // Open is tracked for close gating; no group chat spam.
         market.OpenAnnounced = true;
         await db.SaveChangesAsync(cancellationToken);
     }
@@ -66,15 +59,7 @@ public sealed class MarketChatNotifier : IMarketChatNotifier
             return;
         }
 
-        var text = MarketAnnouncementFormatter.FormatReminder(
-            ToteEconomy.BetWindowCloseHourMsk,
-            bank);
-
-        if (!await TrySendAsync(text, cancellationToken))
-        {
-            return;
-        }
-
+        // Reminder is unused; keep flag so callers stay idempotent.
         market.ReminderAnnounced = true;
         await db.SaveChangesAsync(cancellationToken);
     }
@@ -93,9 +78,17 @@ public sealed class MarketChatNotifier : IMarketChatNotifier
             return;
         }
 
+        if (await CountDistinctBettorsAsync(db, gamingDayAnchor, cancellationToken)
+            < ToteEconomy.MinBettorsPerMarket)
+        {
+            market.CloseAnnounced = true;
+            await db.SaveChangesAsync(cancellationToken);
+            return;
+        }
+
         var text = MarketAnnouncementFormatter.FormatClose(bank);
 
-        if (!await TrySendAsync(text, cancellationToken))
+        if (!await TrySendAsync(text, disableNotification: true, cancellationToken))
         {
             return;
         }
@@ -128,9 +121,18 @@ public sealed class MarketChatNotifier : IMarketChatNotifier
             return;
         }
 
+        if (await CountDistinctBettorsAsync(db, gamingDayAnchor, cancellationToken)
+            < ToteEconomy.MinBettorsPerMarket)
+        {
+            market.CloseAnnounced = true;
+            market.ReminderAnnounced = true;
+            await db.SaveChangesAsync(cancellationToken);
+            return;
+        }
+
         var text = MarketAnnouncementFormatter.FormatGameStartedClose(bank);
 
-        if (!await TrySendAsync(text, cancellationToken))
+        if (!await TrySendAsync(text, disableNotification: true, cancellationToken))
         {
             return;
         }
@@ -202,7 +204,7 @@ public sealed class MarketChatNotifier : IMarketChatNotifier
             text = MarketAnnouncementFormatter.FormatCancelled(result.CancelReason, result.Bank);
         }
 
-        if (!await TrySendAsync(text, cancellationToken))
+        if (!await TrySendAsync(text, disableNotification: false, cancellationToken))
         {
             return;
         }
@@ -211,7 +213,23 @@ public sealed class MarketChatNotifier : IMarketChatNotifier
         await db.SaveChangesAsync(cancellationToken);
     }
 
-    private async Task<bool> TrySendAsync(string text, CancellationToken cancellationToken)
+    private static async Task<int> CountDistinctBettorsAsync(
+        BotDbContext db,
+        DateOnly gamingDayAnchor,
+        CancellationToken cancellationToken)
+    {
+        return await db.DailyBets
+            .AsNoTracking()
+            .Where(b => b.GamingDayAnchor == gamingDayAnchor)
+            .Select(b => b.TelegramUserId)
+            .Distinct()
+            .CountAsync(cancellationToken);
+    }
+
+    private async Task<bool> TrySendAsync(
+        string text,
+        bool disableNotification,
+        CancellationToken cancellationToken)
     {
         if (_botSettings.GroupChatId == 0)
         {
@@ -223,6 +241,7 @@ public sealed class MarketChatNotifier : IMarketChatNotifier
             await _bot.SendMessage(
                 _botSettings.GroupChatId,
                 text,
+                disableNotification: disableNotification,
                 cancellationToken: cancellationToken);
             return true;
         }

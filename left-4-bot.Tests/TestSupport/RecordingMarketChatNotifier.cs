@@ -4,13 +4,13 @@ using Microsoft.EntityFrameworkCore;
 namespace left_4_bot.Tests.TestSupport;
 
 /// <summary>
-/// Records market announcements and marks DB flags like production (no Telegram).
+/// Records market announcement kinds and marks DB flags like production (no Telegram).
 /// </summary>
 public sealed class RecordingMarketChatNotifier : IMarketChatNotifier
 {
     private readonly IDbContextFactory<BotDbContext> _dbFactory;
 
-    public List<string> Messages { get; } = [];
+    public List<RecordedMarketAnnouncement> Announcements { get; } = [];
 
     public RecordingMarketChatNotifier(IDbContextFactory<BotDbContext> dbFactory)
     {
@@ -28,8 +28,6 @@ public sealed class RecordingMarketChatNotifier : IMarketChatNotifier
             return;
         }
 
-        Messages.Add(MarketAnnouncementFormatter.FormatOpen(
-            ToteEconomy.BetWindowCloseHourMsk));
         market.OpenAnnounced = true;
         await db.SaveChangesAsync(cancellationToken);
     }
@@ -51,9 +49,6 @@ public sealed class RecordingMarketChatNotifier : IMarketChatNotifier
             return;
         }
 
-        Messages.Add(MarketAnnouncementFormatter.FormatReminder(
-            ToteEconomy.BetWindowCloseHourMsk,
-            bank));
         market.ReminderAnnounced = true;
         await db.SaveChangesAsync(cancellationToken);
     }
@@ -72,7 +67,21 @@ public sealed class RecordingMarketChatNotifier : IMarketChatNotifier
             return;
         }
 
-        Messages.Add(MarketAnnouncementFormatter.FormatClose(bank));
+        var bettorCount = await db.DailyBets
+            .AsNoTracking()
+            .Where(b => b.GamingDayAnchor == gamingDayAnchor)
+            .Select(b => b.TelegramUserId)
+            .Distinct()
+            .CountAsync(cancellationToken);
+
+        if (bettorCount < ToteEconomy.MinBettorsPerMarket)
+        {
+            market.CloseAnnounced = true;
+            await db.SaveChangesAsync(cancellationToken);
+            return;
+        }
+
+        Announcements.Add(RecordedMarketAnnouncement.Close);
         market.CloseAnnounced = true;
         await db.SaveChangesAsync(cancellationToken);
     }
@@ -101,7 +110,22 @@ public sealed class RecordingMarketChatNotifier : IMarketChatNotifier
             return;
         }
 
-        Messages.Add(MarketAnnouncementFormatter.FormatGameStartedClose(bank));
+        var bettorCount = await db.DailyBets
+            .AsNoTracking()
+            .Where(b => b.GamingDayAnchor == gamingDayAnchor)
+            .Select(b => b.TelegramUserId)
+            .Distinct()
+            .CountAsync(cancellationToken);
+
+        if (bettorCount < ToteEconomy.MinBettorsPerMarket)
+        {
+            market.CloseAnnounced = true;
+            market.ReminderAnnounced = true;
+            await db.SaveChangesAsync(cancellationToken);
+            return;
+        }
+
+        Announcements.Add(RecordedMarketAnnouncement.GameStartedClose);
         market.CloseAnnounced = true;
         market.ReminderAnnounced = true;
         await db.SaveChangesAsync(cancellationToken);
@@ -133,20 +157,9 @@ public sealed class RecordingMarketChatNotifier : IMarketChatNotifier
             return;
         }
 
-        if (result.Status == BetSettlementStatus.Settled)
-        {
-            var topLabels = result.TopPlayers
-                .Select(p => string.IsNullOrWhiteSpace(p.Name) ? p.SteamId : p.Name)
-                .ToList();
-            var winnerLines = result.Credits
-                .Select(c => $"id {c.TelegramUserId}: +{c.Credited} таблов")
-                .ToList();
-            Messages.Add(MarketAnnouncementFormatter.FormatSettled(topLabels, winnerLines, result.Bank));
-        }
-        else
-        {
-            Messages.Add(MarketAnnouncementFormatter.FormatCancelled(result.CancelReason, result.Bank));
-        }
+        Announcements.Add(result.Status == BetSettlementStatus.Settled
+            ? RecordedMarketAnnouncement.Settled
+            : RecordedMarketAnnouncement.Cancelled);
 
         market.SettlementAnnounced = true;
         await db.SaveChangesAsync(cancellationToken);
