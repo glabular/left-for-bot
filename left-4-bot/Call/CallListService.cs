@@ -39,10 +39,9 @@ public sealed class CallListService
         @"^[A-Za-z0-9_]+$",
         RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
-    // Opening / closing quote chars for /call phrases (ASCII, guillemets, curly, single, German).
+    // Matching quote pairs share the same index.
     private const string PhraseOpenQuotes = "\"'«“„‘‹";
     private const string PhraseCloseQuotes = "\"'»”“’›";
-    private const string PhraseAllQuotes = PhraseOpenQuotes + PhraseCloseQuotes;
 
     private readonly string _projectAppSettingsPath;
     private readonly string _runtimeAppSettingsPath;
@@ -259,8 +258,10 @@ public sealed class CallListService
 
     /// <summary>
     /// Tries to parse a quoted phrase from command arguments.
-    /// Accepts ASCII <c>"…"</c> / <c>'…'</c>, guillemets <c>«…»</c>, curly <c>“…”</c> / <c>‘…’</c>,
-    /// German <c>„…“</c>, and mixed open/close pairs. Nested quotes inside the phrase are rejected.
+    /// The phrase must start with a supported opening quote and end with its matching closer
+    /// (after trim). Content between the pair is taken as-is, including nested quotes.
+    /// Supported pairs: <c>"…"</c>, <c>'…'</c>, <c>«…»</c>, <c>“…”</c>, <c>„…“</c>,
+    /// <c>‘…’</c>, <c>‹…›</c>.
     /// </summary>
     /// <param name="args">Raw command arguments.</param>
     /// <param name="phrase">Parsed inner phrase when the method returns <see langword="true"/>.</param>
@@ -286,32 +287,26 @@ public sealed class CallListService
         }
 
         var trimmed = args.Trim();
-        if (trimmed.Length == 0 || !IsPhraseOpenQuote(trimmed[0]))
+        var quoteIndex = PhraseOpenQuotes.IndexOf(trimmed[0]);
+
+        if (quoteIndex < 0)
         {
             return false;
         }
 
         looksLikeQuotedPhrase = true;
 
-        if (trimmed.Length < 2 || !IsPhraseCloseQuote(trimmed[^1]))
+        // After Trim, the matching closer must be the final character: anything after it would
+        // be trailing junk, and for identical open/close chars the last closer is the outer one
+        // (so inner "quoted" words are kept).
+        if (trimmed.Length < 2 || trimmed[^1] != PhraseCloseQuotes[quoteIndex])
         {
             return false;
         }
 
-        var inner = trimmed[1..^1].Trim();
-        if (inner.Length == 0)
-        {
-            return false;
-        }
+        phrase = trimmed[1..^1].Trim();
 
-        // Nested quotes not supported — keep the parser simple.
-        if (inner.AsSpan().IndexOfAny(PhraseAllQuotes) >= 0)
-        {
-            return false;
-        }
-
-        phrase = inner;
-        return true;
+        return phrase.Length > 0;
     }
 
     /// <summary>
@@ -369,10 +364,6 @@ public sealed class CallListService
 
         return true;
     }
-
-    private static bool IsPhraseOpenQuote(char c) => PhraseOpenQuotes.Contains(c);
-
-    private static bool IsPhraseCloseQuote(char c) => PhraseCloseQuotes.Contains(c);
 
     /// <summary>
     /// Writes the current call list to project and runtime appsettings.Local.json files.

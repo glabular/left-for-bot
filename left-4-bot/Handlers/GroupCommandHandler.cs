@@ -149,10 +149,12 @@ public sealed class GroupCommandHandler
 
     private const string CallPhraseUsageText =
         """
-        Фраза должна быть в кавычках (подойдут "...", «…», '...').
+        Фраза должна быть в парных кавычках: "…", «…» или '…'.
+        Внутри фразы кавычки можно использовать — важна только внешняя пара.
 
         Например:
             /call "Го играть!"
+            /call "Есть "зачем" жить"
         """;
 
     private const string RestartInstructionText =

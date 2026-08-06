@@ -11,8 +11,25 @@ public sealed class CallListServiceQuotedPhraseTests
     [InlineData("‘ping’", "ping")]
     [InlineData("“ping”", "ping")]
     [InlineData("„ping“", "ping")]
-    [InlineData("«Подгребайте\"", "Подгребайте")]
+    [InlineData("‹ping›", "ping")]
+    [InlineData("  \"  spaced  \"  ", "spaced")]
     public void TryParseQuotedPhrase_ValidQuotes_ReturnsInnerPhrase(string args, string expected)
+    {
+        var ok = CallListService.TryParseQuotedPhrase(args, out var phrase, out var looksLikeQuoted);
+
+        Assert.True(ok);
+        Assert.True(looksLikeQuoted);
+        Assert.Equal(expected, phrase);
+    }
+
+    [Theory]
+    [InlineData(
+        "\"Тот, у кого есть \"зачем\" жить, может выдержать почти любое \"как\"... кроме спавна двух Танков одновременно. — Фридрих Ницше.\"",
+        "Тот, у кого есть \"зачем\" жить, может выдержать почти любое \"как\"... кроме спавна двух Танков одновременно. — Фридрих Ницше.")]
+    [InlineData("«Есть \"зачем\" жить»", "Есть \"зачем\" жить")]
+    [InlineData("\"Outer «inner» still\"", "Outer «inner» still")]
+    [InlineData("«a «b» c»", "a «b» c")]
+    public void TryParseQuotedPhrase_NestedQuotes_KeepsInnerContent(string args, string expected)
     {
         var ok = CallListService.TryParseQuotedPhrase(args, out var phrase, out var looksLikeQuoted);
 
@@ -26,6 +43,9 @@ public sealed class CallListServiceQuotedPhraseTests
     [InlineData("\"\"")]
     [InlineData("«»")]
     [InlineData("\" \"")]
+    [InlineData("«Подгребайте\"")] // mismatched pair
+    [InlineData("\"hello\" x")] // trailing junk after closer
+    [InlineData("\"unclosed")]
     public void TryParseQuotedPhrase_InvalidQuoted_SetsLooksLikeQuoted(string args)
     {
         var ok = CallListService.TryParseQuotedPhrase(args, out var phrase, out var looksLikeQuoted);
