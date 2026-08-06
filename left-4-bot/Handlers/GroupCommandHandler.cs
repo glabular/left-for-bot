@@ -180,6 +180,7 @@ public sealed class GroupCommandHandler
     private readonly PlayersService _playersService;
     private readonly SteamPlayerProfileService _steamProfiles;
     private readonly BettingService _bettingService;
+    private readonly HeavyCommandGate _heavyCommandGate;
 
     public GroupCommandHandler(
         GoldenPoolService goldenPool,
@@ -194,7 +195,8 @@ public sealed class GroupCommandHandler
         SpyState spyState,
         PlayersService playersService,
         SteamPlayerProfileService steamProfiles,
-        BettingService bettingService)
+        BettingService bettingService,
+        HeavyCommandGate heavyCommandGate)
     {
         _goldenPool = goldenPool;
         _editLimiter = editLimiter;
@@ -209,6 +211,7 @@ public sealed class GroupCommandHandler
         _playersService = playersService;
         _steamProfiles = steamProfiles;
         _bettingService = bettingService;
+        _heavyCommandGate = heavyCommandGate;
     }
 
     public async Task HandleAsync(
@@ -548,16 +551,12 @@ public sealed class GroupCommandHandler
         string args,
         CancellationToken cancellationToken)
     {
-        Task<PlayStatsResult> statsTask;
+        DateOnly? gamingDay = null;
 
-        if (string.IsNullOrWhiteSpace(args))
-        {
-            statsTask = _playStats.GetCurrentGamingDayStatsAsync(cancellationToken);
-        }
-        else
+        if (!string.IsNullOrWhiteSpace(args))
         {
             var today = DateOnly.FromDateTime(GamingDay.NowMoscow());
-            if (!StatDateParser.TryParse(args, today, out var gamingDay))
+            if (!StatDateParser.TryParse(args, today, out var parsedDay))
             {
                 await bot.SendMessage(
                     message.Chat.Id,
@@ -578,21 +577,41 @@ public sealed class GroupCommandHandler
                 return;
             }
 
-            statsTask = _playStats.GetStatsForGamingDayAsync(gamingDay, cancellationToken);
+            gamingDay = parsedDay;
         }
 
-        await bot.SendMessage(
-            message.Chat.Id,
-            "Обрабатываю логи...",
-            cancellationToken: cancellationToken);
+        if (!await _heavyCommandGate.TryEnterAsync(cancellationToken))
+        {
+            await bot.SendMessage(
+                message.Chat.Id,
+                "⚠️ Уже обрабатывается другая команда. Подождите окончания текущего запроса.",
+                cancellationToken: cancellationToken);
+            return;
+        }
 
-        var result = await statsTask;
+        try
+        {
+            var statsTask = gamingDay is { } day
+                ? _playStats.GetStatsForGamingDayAsync(day, cancellationToken)
+                : _playStats.GetCurrentGamingDayStatsAsync(cancellationToken);
 
-        await PlayStatsMessageSender.SendStatMessagesAsync(
-            bot,
-            message.Chat.Id,
-            result.Messages,
-            cancellationToken);
+            await bot.SendMessage(
+                message.Chat.Id,
+                "Обрабатываю логи...",
+                cancellationToken: cancellationToken);
+
+            var result = await statsTask;
+
+            await PlayStatsMessageSender.SendStatMessagesAsync(
+                bot,
+                message.Chat.Id,
+                result.Messages,
+                cancellationToken);
+        }
+        finally
+        {
+            _heavyCommandGate.Exit();
+        }
     }
 
     private async Task HandleRestartAsync(

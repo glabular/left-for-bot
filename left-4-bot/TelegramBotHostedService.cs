@@ -68,17 +68,45 @@ public sealed class TelegramBotHostedService : BackgroundService
         }
     }
 
-    private async Task HandleUpdateAsync(
+    private Task HandleUpdateAsync(
         ITelegramBotClient bot,
         Telegram.Bot.Types.Update update,
         CancellationToken cancellationToken)
     {
         ResetBackoffIfRecovered();
 
-        using var scope = _services.CreateScope();
-        var handler = scope.ServiceProvider.GetRequiredService<UpdateHandler>();
+        // ReceiveAsync awaits this callback before handing the next update. Returning
+        // completed lets updates overlap so HeavyCommandGate can reject a second /stat
+        // while the first is still running (otherwise the gate is always free).
+        _ = ProcessUpdateAsync(bot, update, cancellationToken);
+        return Task.CompletedTask;
+    }
 
-        await handler.HandleUpdateAsync(bot, update, cancellationToken);
+    private async Task ProcessUpdateAsync(
+        ITelegramBotClient bot,
+        Telegram.Bot.Types.Update update,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            using var scope = _services.CreateScope();
+            var handler = scope.ServiceProvider.GetRequiredService<UpdateHandler>();
+            await handler.HandleUpdateAsync(bot, update, cancellationToken);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+        }
+        catch (Exception exception)
+        {
+            if (TelegramNetworkErrorClassifier.IsTransientNetworkError(exception))
+            {
+                _connectionMonitor.ReportTransientFailure(exception, "handler");
+                return;
+            }
+
+            _logger.LogError(exception, "Unhandled error while processing update {UpdateId}.", update.Id);
+            _connectionMonitor.ReportFatalFailure(exception, "handler");
+        }
     }
 
     private async Task HandlePollingErrorAsync(

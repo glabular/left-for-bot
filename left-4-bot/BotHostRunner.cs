@@ -47,6 +47,7 @@ public static class BotHostRunner
         builder.Services.AddHostedService<TelegramBotHostedService>();
         builder.Services.AddSingleton<UpdateHandler>();
         builder.Services.AddSingleton<BotUsernameProvider>();
+        builder.Services.AddSingleton<HeavyCommandGate>();
         builder.Services.AddSingleton<GroupCommandHandler>();
 
         var dbPath = Path.Combine(builder.Environment.ContentRootPath, "data", "bot.db");
