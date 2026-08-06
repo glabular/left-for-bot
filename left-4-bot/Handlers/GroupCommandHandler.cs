@@ -149,7 +149,7 @@ public sealed class GroupCommandHandler
 
     private const string CallPhraseUsageText =
         """
-        Фраза должна быть в двойных кавычках.
+        Фраза должна быть в кавычках (подойдут "...", «…», '...').
 
         Например:
             /call "Го играть!"
@@ -359,9 +359,13 @@ public sealed class GroupCommandHandler
         var nickArg = args.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)[0];
         if (!CallListService.TryNormalizeUsername(nickArg, out var username))
         {
+            var invalidReply = CallListService.LooksLikeUsernameAttempt(args)
+                ? "Некорректный ник. Telegram username: 5–32 символов (латиница, цифры, _).\n\n" + CallUsageText
+                : CallUsageText;
+
             await bot.SendMessage(
                 message.Chat.Id,
-                "Некорректный ник. Telegram username: 5–32 символов (латиница, цифры, _).\n\n" + CallUsageText,
+                invalidReply,
                 cancellationToken: cancellationToken);
             return;
         }

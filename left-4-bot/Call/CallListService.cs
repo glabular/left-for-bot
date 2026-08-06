@@ -32,6 +32,18 @@ public sealed class CallListService
         @"^[A-Za-z0-9_]{5,32}$",
         RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
+    /// <summary>
+    /// ASCII username alphabet of any length (used to classify failed nick attempts vs garbage).
+    /// </summary>
+    private static readonly Regex UsernameAlphabetPattern = new(
+        @"^[A-Za-z0-9_]+$",
+        RegexOptions.Compiled | RegexOptions.CultureInvariant);
+
+    // Opening / closing quote chars for /call phrases (ASCII, guillemets, curly, single, German).
+    private const string PhraseOpenQuotes = "\"'«“„‘‹";
+    private const string PhraseCloseQuotes = "\"'»”“’›";
+    private const string PhraseAllQuotes = PhraseOpenQuotes + PhraseCloseQuotes;
+
     private readonly string _projectAppSettingsPath;
     private readonly string _runtimeAppSettingsPath;
     private List<string> _usernames;
@@ -247,11 +259,14 @@ public sealed class CallListService
 
     /// <summary>
     /// Tries to parse a quoted phrase from command arguments.
+    /// Accepts ASCII <c>"…"</c> / <c>'…'</c>, guillemets <c>«…»</c>, curly <c>“…”</c> / <c>‘…’</c>,
+    /// German <c>„…“</c>, and mixed open/close pairs. Nested quotes inside the phrase are rejected.
     /// </summary>
     /// <param name="args">Raw command arguments.</param>
     /// <param name="phrase">Parsed inner phrase when the method returns <see langword="true"/>.</param>
     /// <param name="looksLikeQuotedPhrase">
-    /// <see langword="true"/> when <paramref name="args"/> start with <c>"</c>, even if the quotes are invalid.
+    /// <see langword="true"/> when <paramref name="args"/> start with a quote character,
+    /// even if the quotes are invalid or unclosed.
     /// </param>
     /// <returns>
     /// <see langword="true"/> if a non-empty quoted phrase was parsed; otherwise <see langword="false"/>
@@ -271,14 +286,14 @@ public sealed class CallListService
         }
 
         var trimmed = args.Trim();
-        if (!trimmed.StartsWith('"'))
+        if (trimmed.Length == 0 || !IsPhraseOpenQuote(trimmed[0]))
         {
             return false;
         }
 
         looksLikeQuotedPhrase = true;
 
-        if (trimmed.Length < 2 || !trimmed.EndsWith('"'))
+        if (trimmed.Length < 2 || !IsPhraseCloseQuote(trimmed[^1]))
         {
             return false;
         }
@@ -290,13 +305,38 @@ public sealed class CallListService
         }
 
         // Nested quotes not supported — keep the parser simple.
-        if (inner.Contains('"'))
+        if (inner.AsSpan().IndexOfAny(PhraseAllQuotes) >= 0)
         {
             return false;
         }
 
         phrase = inner;
         return true;
+    }
+
+    /// <summary>
+    /// Returns whether the first token of <paramref name="args"/> looks like a username attempt
+    /// (leading <c>@</c> or ASCII username alphabet), even if it fails Telegram length rules.
+    /// </summary>
+    /// <param name="args">Raw command arguments.</param>
+    /// <returns>
+    /// <see langword="true"/> when the caller should show a username validation error
+    /// rather than generic <c>/call</c> usage.
+    /// </returns>
+    public static bool LooksLikeUsernameAttempt(string args)
+    {
+        if (string.IsNullOrWhiteSpace(args))
+        {
+            return false;
+        }
+
+        var token = args.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)[0];
+        if (token.StartsWith('@'))
+        {
+            return true;
+        }
+
+        return UsernameAlphabetPattern.IsMatch(token);
     }
 
     /// <summary>
@@ -329,6 +369,10 @@ public sealed class CallListService
 
         return true;
     }
+
+    private static bool IsPhraseOpenQuote(char c) => PhraseOpenQuotes.Contains(c);
+
+    private static bool IsPhraseCloseQuote(char c) => PhraseCloseQuotes.Contains(c);
 
     /// <summary>
     /// Writes the current call list to project and runtime appsettings.Local.json files.
