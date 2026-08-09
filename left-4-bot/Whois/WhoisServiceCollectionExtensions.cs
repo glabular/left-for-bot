@@ -24,6 +24,7 @@ public static class WhoisServiceCollectionExtensions
         services.AddSingleton<WhoisSessionTracker>();
         services.AddHttpClient(nameof(SteamPlayerProfileService));
         services.AddSingleton<SteamPlayerProfileService>();
+        services.AddSingleton<SteamIdResolveService>();
         services.AddSingleton<WhoisService>();
         services.AddSingleton<IServerLogTailConsumer, WhoisLogTailConsumer>();
 

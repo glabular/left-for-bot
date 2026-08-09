@@ -5,6 +5,7 @@ using left_4_bot.Rcon;
 using left_4_bot.ServerLogs;
 using left_4_bot.Spy;
 using left_4_bot.Whois;
+using System.Globalization;
 using Telegram.Bot;
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
@@ -37,6 +38,11 @@ public sealed class GroupCommandHandler
         🖥️ <b>Сервер</b>
         /status — статус сервера.
         /restart да | /restart yes — перезагрузить сервер.
+        /ban — игроки за последние 24 часа.
+        /ban N | /ban &lt;Steam&gt; — навсегда забанить.
+        /unban — список банов на сервере.
+        /unban N | /unban &lt;Steam&gt; — снять бан.
+        /ban ? | /unban ? — подробная справка по бану/разбану.
         /server — подсказка как прописать сервер в игре.
 
         🔎 <b>Проверка игроков</b>
@@ -169,6 +175,31 @@ public sealed class GroupCommandHandler
         Команда /restart без параметра сервер не перезагружает.
         """;
 
+    private const string BanHelpText =
+        """
+        <b>Бан игроков</b>
+
+        /ban — список игроков за последние 24 часа
+        /ban N — навсегда забанить игрока с номером N из этого списка
+        /ban &lt;Steam&gt; — забанить по ссылке или Steam ID
+        /ban ? — эта справка
+
+        Steam: ссылка на профиль, 7656119… или STEAM_1:1:…
+        Снять бан: /unban
+        """;
+
+    private const string UnbanHelpText =
+        """
+        <b>Снятие бана</b>
+
+        /unban — список забаненных на сервере
+        /unban N — снять бан с номером N из этого списка
+        /unban &lt;Steam&gt; — снять бан по ссылке или Steam ID
+        /unban ? — эта справка
+
+        Steam: ссылка на профиль, 7656119… или STEAM_1:1:…
+        """;
+
     private readonly GoldenPoolService _goldenPool;
     private readonly GoldenPoolEditLimiter _editLimiter;
     private readonly CallListService _callList;
@@ -183,6 +214,10 @@ public sealed class GroupCommandHandler
     private readonly SteamPlayerProfileService _steamProfiles;
     private readonly BettingService _bettingService;
     private readonly HeavyCommandGate _heavyCommandGate;
+    private readonly RecentPlayersService _recentPlayers;
+    private readonly ServerBanService _serverBan;
+    private readonly PlayerModerationSelectionStore _moderationSelection;
+    private readonly SteamIdResolveService _steamIdResolve;
 
     public GroupCommandHandler(
         GoldenPoolService goldenPool,
@@ -198,7 +233,11 @@ public sealed class GroupCommandHandler
         PlayersService playersService,
         SteamPlayerProfileService steamProfiles,
         BettingService bettingService,
-        HeavyCommandGate heavyCommandGate)
+        HeavyCommandGate heavyCommandGate,
+        RecentPlayersService recentPlayers,
+        ServerBanService serverBan,
+        PlayerModerationSelectionStore moderationSelection,
+        SteamIdResolveService steamIdResolve)
     {
         _goldenPool = goldenPool;
         _editLimiter = editLimiter;
@@ -214,6 +253,10 @@ public sealed class GroupCommandHandler
         _steamProfiles = steamProfiles;
         _bettingService = bettingService;
         _heavyCommandGate = heavyCommandGate;
+        _recentPlayers = recentPlayers;
+        _serverBan = serverBan;
+        _moderationSelection = moderationSelection;
+        _steamIdResolve = steamIdResolve;
     }
 
     public async Task HandleAsync(
@@ -253,6 +296,14 @@ public sealed class GroupCommandHandler
 
             case "restart":
                 await HandleRestartAsync(bot, message, args, cancellationToken);
+                break;
+
+            case "ban":
+                await HandleBanAsync(bot, message, args, cancellationToken);
+                break;
+
+            case "unban":
+                await HandleUnbanAsync(bot, message, args, cancellationToken);
                 break;
 
             case "server":
@@ -702,6 +753,441 @@ public sealed class GroupCommandHandler
     private static bool IsRestartConfirmation(string args) =>
         args.Trim().Equals("да", StringComparison.OrdinalIgnoreCase)
         || args.Trim().Equals("yes", StringComparison.OrdinalIgnoreCase);
+
+    private async Task HandleBanAsync(
+        ITelegramBotClient bot,
+        Message message,
+        string args,
+        CancellationToken cancellationToken)
+    {
+        var trimmed = args.Trim();
+
+        if (trimmed.Equals("?", StringComparison.Ordinal))
+        {
+            await bot.SendMessage(
+                message.Chat.Id,
+                BanHelpText,
+                parseMode: ParseMode.Html,
+                cancellationToken: cancellationToken);
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(trimmed))
+        {
+            await HandleBanListAsync(bot, message, cancellationToken);
+            return;
+        }
+
+        if (TryParseOneBasedIndex(trimmed, out var index))
+        {
+            await BanByListIndexAsync(bot, message, index, cancellationToken);
+            return;
+        }
+
+        var resolved = await _steamIdResolve.TryResolveClassicAsync(trimmed, cancellationToken);
+        if (!resolved.IsSuccess || resolved.ClassicSteamId is null)
+        {
+            await bot.SendMessage(
+                message.Chat.Id,
+                string.IsNullOrWhiteSpace(resolved.ErrorMessage)
+                    ? "Неверный параметр.\n\n" + BanHelpText
+                    : resolved.ErrorMessage + "\n\n" + BanHelpText,
+                parseMode: ParseMode.Html,
+                linkPreviewOptions: new LinkPreviewOptions { IsDisabled = true },
+                cancellationToken: cancellationToken);
+            return;
+        }
+
+        await BanBySteamIdAsync(bot, message, resolved.ClassicSteamId, cancellationToken);
+    }
+
+    private async Task BanByListIndexAsync(
+        ITelegramBotClient bot,
+        Message message,
+        int index,
+        CancellationToken cancellationToken)
+    {
+        if (!_moderationSelection.TryGetBanCandidate(index, out var candidate, out var selectionError)
+            || candidate is null)
+        {
+            await bot.SendMessage(
+                message.Chat.Id,
+                selectionError,
+                cancellationToken: cancellationToken);
+            return;
+        }
+
+        await ExecuteBanAsync(
+            bot,
+            message,
+            candidate.Name,
+            candidate.ClassicSteamId,
+            cancellationToken);
+    }
+
+    private async Task BanBySteamIdAsync(
+        ITelegramBotClient bot,
+        Message message,
+        string classicSteamId,
+        CancellationToken cancellationToken)
+    {
+        if (IsPrioritySteamId(classicSteamId))
+        {
+            await bot.SendMessage(
+                message.Chat.Id,
+                "Этого игрока нельзя забанить: он в приоритетном списке.",
+                cancellationToken: cancellationToken);
+            return;
+        }
+
+        var displayName = await ResolveDisplayNameAsync(classicSteamId, cancellationToken);
+        await ExecuteBanAsync(bot, message, displayName, classicSteamId, cancellationToken);
+    }
+
+    private async Task ExecuteBanAsync(
+        ITelegramBotClient bot,
+        Message message,
+        string displayName,
+        string classicSteamId,
+        CancellationToken cancellationToken)
+    {
+        await bot.SendMessage(
+            message.Chat.Id,
+            ModerationListFormatter.FormatBanProgress(displayName, classicSteamId),
+            parseMode: ParseMode.Html,
+            linkPreviewOptions: new LinkPreviewOptions { IsDisabled = true },
+            cancellationToken: cancellationToken);
+
+        var result = await _serverBan.BanAsync(classicSteamId, cancellationToken);
+        var reply = result.IsSuccess
+            ? ModerationListFormatter.FormatBanSuccess(displayName, classicSteamId, result.Message)
+            : result.Message;
+
+        await bot.SendMessage(
+            message.Chat.Id,
+            reply,
+            parseMode: result.IsSuccess ? ParseMode.Html : default,
+            linkPreviewOptions: result.IsSuccess
+                ? new LinkPreviewOptions { IsDisabled = true }
+                : null,
+            cancellationToken: cancellationToken);
+    }
+
+    private async Task HandleBanListAsync(
+        ITelegramBotClient bot,
+        Message message,
+        CancellationToken cancellationToken)
+    {
+        if (!await _heavyCommandGate.TryEnterAsync(cancellationToken))
+        {
+            await bot.SendMessage(
+                message.Chat.Id,
+                "⚠️ Уже обрабатывается другая команда. Подождите окончания текущего запроса.",
+                cancellationToken: cancellationToken);
+            return;
+        }
+
+        try
+        {
+            await bot.SendMessage(
+                message.Chat.Id,
+                "Собираю игроков за последние 24 часа…",
+                cancellationToken: cancellationToken);
+
+            var query = await _recentPlayers.GetPlayersLast24HoursAsync(cancellationToken);
+            if (!query.IsSuccess)
+            {
+                await bot.SendMessage(
+                    message.Chat.Id,
+                    query.Message,
+                    cancellationToken: cancellationToken);
+                return;
+            }
+
+            if (query.Players.Count == 0)
+            {
+                _moderationSelection.SetBanCandidates([]);
+                await bot.SendMessage(
+                    message.Chat.Id,
+                    "За последние 24 часа в логах не найдено игроков.",
+                    cancellationToken: cancellationToken);
+                return;
+            }
+
+            _moderationSelection.SetBanCandidates(query.Players);
+
+            await bot.SendMessage(
+                message.Chat.Id,
+                ModerationListFormatter.FormatBanCandidates(query.Players),
+                parseMode: ParseMode.Html,
+                linkPreviewOptions: new LinkPreviewOptions { IsDisabled = true },
+                cancellationToken: cancellationToken);
+        }
+        finally
+        {
+            _heavyCommandGate.Exit();
+        }
+    }
+
+    private async Task HandleUnbanAsync(
+        ITelegramBotClient bot,
+        Message message,
+        string args,
+        CancellationToken cancellationToken)
+    {
+        var trimmed = args.Trim();
+
+        if (trimmed.Equals("?", StringComparison.Ordinal))
+        {
+            await bot.SendMessage(
+                message.Chat.Id,
+                UnbanHelpText,
+                parseMode: ParseMode.Html,
+                cancellationToken: cancellationToken);
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(trimmed))
+        {
+            await HandleUnbanListAsync(bot, message, cancellationToken);
+            return;
+        }
+
+        if (TryParseOneBasedIndex(trimmed, out var index))
+        {
+            await UnbanByListIndexAsync(bot, message, index, cancellationToken);
+            return;
+        }
+
+        var resolved = await _steamIdResolve.TryResolveClassicAsync(trimmed, cancellationToken);
+        if (!resolved.IsSuccess || resolved.ClassicSteamId is null)
+        {
+            await bot.SendMessage(
+                message.Chat.Id,
+                string.IsNullOrWhiteSpace(resolved.ErrorMessage)
+                    ? "Неверный параметр.\n\n" + UnbanHelpText
+                    : resolved.ErrorMessage + "\n\n" + UnbanHelpText,
+                parseMode: ParseMode.Html,
+                linkPreviewOptions: new LinkPreviewOptions { IsDisabled = true },
+                cancellationToken: cancellationToken);
+            return;
+        }
+
+        var displayName = await ResolveDisplayNameAsync(resolved.ClassicSteamId, cancellationToken);
+        await ExecuteUnbanBySteamAsync(
+            bot,
+            message,
+            displayName,
+            resolved.ClassicSteamId,
+            cancellationToken);
+    }
+
+    private async Task UnbanByListIndexAsync(
+        ITelegramBotClient bot,
+        Message message,
+        int index,
+        CancellationToken cancellationToken)
+    {
+        if (!_moderationSelection.TryGetUnbanEntry(index, out var entry, out var selectionError)
+            || entry is null)
+        {
+            await bot.SendMessage(
+                message.Chat.Id,
+                selectionError,
+                cancellationToken: cancellationToken);
+            return;
+        }
+
+        await bot.SendMessage(
+            message.Chat.Id,
+            ModerationListFormatter.FormatUnbanProgress(entry.DisplayName, entry.ClassicSteamId),
+            parseMode: ParseMode.Html,
+            linkPreviewOptions: new LinkPreviewOptions { IsDisabled = true },
+            cancellationToken: cancellationToken);
+
+        var result = await _serverBan.UnbanAsync(
+            entry.BanSlot,
+            entry.ClassicSteamId,
+            cancellationToken);
+
+        var reply = result.IsSuccess
+            ? ModerationListFormatter.FormatUnbanSuccess(entry.DisplayName, entry.ClassicSteamId)
+            : result.Message;
+
+        await bot.SendMessage(
+            message.Chat.Id,
+            reply,
+            parseMode: result.IsSuccess ? ParseMode.Html : default,
+            linkPreviewOptions: result.IsSuccess
+                ? new LinkPreviewOptions { IsDisabled = true }
+                : null,
+            cancellationToken: cancellationToken);
+    }
+
+    private async Task ExecuteUnbanBySteamAsync(
+        ITelegramBotClient bot,
+        Message message,
+        string displayName,
+        string classicSteamId,
+        CancellationToken cancellationToken)
+    {
+        await bot.SendMessage(
+            message.Chat.Id,
+            ModerationListFormatter.FormatUnbanProgress(displayName, classicSteamId),
+            parseMode: ParseMode.Html,
+            linkPreviewOptions: new LinkPreviewOptions { IsDisabled = true },
+            cancellationToken: cancellationToken);
+
+        var result = await _serverBan.UnbanBySteamIdAsync(classicSteamId, cancellationToken);
+        var reply = result.IsSuccess
+            ? ModerationListFormatter.FormatUnbanSuccess(displayName, classicSteamId)
+            : result.Message;
+
+        await bot.SendMessage(
+            message.Chat.Id,
+            reply,
+            parseMode: result.IsSuccess ? ParseMode.Html : default,
+            linkPreviewOptions: result.IsSuccess
+                ? new LinkPreviewOptions { IsDisabled = true }
+                : null,
+            cancellationToken: cancellationToken);
+    }
+
+    private async Task HandleUnbanListAsync(
+        ITelegramBotClient bot,
+        Message message,
+        CancellationToken cancellationToken)
+    {
+        await bot.SendMessage(
+            message.Chat.Id,
+            "Запрашиваю список банов…",
+            cancellationToken: cancellationToken);
+
+        var (isSuccess, messageText, entries) = await _serverBan.GetBanListAsync(cancellationToken);
+        if (!isSuccess)
+        {
+            await bot.SendMessage(
+                message.Chat.Id,
+                messageText,
+                cancellationToken: cancellationToken);
+            return;
+        }
+
+        if (entries.Count == 0)
+        {
+            _moderationSelection.SetUnbanEntries([]);
+            await bot.SendMessage(
+                message.Chat.Id,
+                "На сервере сейчас нет банов по Steam ID.",
+                cancellationToken: cancellationToken);
+            return;
+        }
+
+        IReadOnlyDictionary<string, string>? personaNames = null;
+        try
+        {
+            personaNames = await _steamProfiles.GetPersonaNamesByClassicSteamIdAsync(
+                entries.Select(e => e.ClassicSteamId).ToList(),
+                cancellationToken);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception)
+        {
+            // Persona names are optional for the list.
+        }
+
+        var selection = entries
+            .Select(e =>
+            {
+                var name = personaNames is not null
+                    && personaNames.TryGetValue(e.ClassicSteamId, out var persona)
+                    && !string.IsNullOrWhiteSpace(persona)
+                        ? persona
+                        : e.ClassicSteamId;
+
+                return new UnbanSelectionEntry(
+                    e.BanSlot,
+                    e.ClassicSteamId,
+                    name,
+                    e.DurationLabel);
+            })
+            .ToList();
+
+        _moderationSelection.SetUnbanEntries(selection);
+
+        await bot.SendMessage(
+            message.Chat.Id,
+            ModerationListFormatter.FormatUnbanEntries(selection),
+            parseMode: ParseMode.Html,
+            linkPreviewOptions: new LinkPreviewOptions { IsDisabled = true },
+            cancellationToken: cancellationToken);
+    }
+
+    private static bool TryParseOneBasedIndex(string args, out int index)
+    {
+        index = 0;
+        var token = args.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        if (token.Length != 1)
+        {
+            return false;
+        }
+
+        return int.TryParse(token[0], NumberStyles.Integer, CultureInfo.InvariantCulture, out index);
+    }
+
+    private bool IsPrioritySteamId(string classicSteamId)
+    {
+        if (!SteamIdConverter.TryToCanonicalClassic(classicSteamId, out var canonical))
+        {
+            canonical = classicSteamId;
+        }
+
+        foreach (var priorityId in _playersService.GetPrioritySteamIds())
+        {
+            if (!SteamIdConverter.TryToCanonicalClassic(priorityId, out var priorityCanonical))
+            {
+                priorityCanonical = priorityId;
+            }
+
+            if (string.Equals(canonical, priorityCanonical, StringComparison.Ordinal))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private async Task<string> ResolveDisplayNameAsync(
+        string classicSteamId,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var names = await _steamProfiles.GetPersonaNamesByClassicSteamIdAsync(
+                [classicSteamId],
+                cancellationToken);
+
+            if (names.TryGetValue(classicSteamId, out var persona)
+                && !string.IsNullOrWhiteSpace(persona))
+            {
+                return persona;
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception)
+        {
+            // Persona name is optional for moderation messages.
+        }
+
+        return classicSteamId;
+    }
 
     private async Task HandleStatusAsync(
         ITelegramBotClient bot,
@@ -1429,56 +1915,18 @@ public sealed class GroupCommandHandler
             return;
         }
 
-        var parsed = SteamProfileLinkParser.Parse(args);
-        ulong? steam64 = null;
-
-        switch (parsed)
-        {
-            case SteamLinkParseFailed failed:
-                await bot.SendMessage(
-                    message.Chat.Id,
-                    failed.ErrorMessage,
-                    linkPreviewOptions: new LinkPreviewOptions { IsDisabled = true },
-                    cancellationToken: cancellationToken);
-                return;
-
-            case SteamLinkParsedSteam64 direct:
-                steam64 = direct.Steam64;
-                break;
-
-            case SteamLinkParsedVanity vanity:
-                if (!_steamProfiles.HasApiKey)
-                {
-                    await bot.SendMessage(
-                        message.Chat.Id,
-                        WhoisService.MissingApiKeyMessage,
-                        cancellationToken: cancellationToken);
-                    return;
-                }
-
-                steam64 = await _steamProfiles.ResolveVanityAsync(vanity.Vanity, cancellationToken);
-
-                if (steam64 is null)
-                {
-                    await bot.SendMessage(
-                        message.Chat.Id,
-                        "Не удалось найти Steam-профиль по этой ссылке /id/… Проверь адрес или используй ссылку вида /profiles/7656119…",
-                        cancellationToken: cancellationToken);
-                    return;
-                }
-
-                break;
-        }
-
-        if (steam64 is null
-            || !SteamIdConverter.TryFromSteam64(steam64.Value, out var classicSteamId))
+        var resolved = await _steamIdResolve.TryResolveClassicAsync(args, cancellationToken);
+        if (!resolved.IsSuccess || resolved.ClassicSteamId is null)
         {
             await bot.SendMessage(
                 message.Chat.Id,
-                "Не удалось разобрать Steam ID из ссылки.",
+                resolved.ErrorMessage ?? "Не удалось разобрать Steam ID из ссылки.",
+                linkPreviewOptions: new LinkPreviewOptions { IsDisabled = true },
                 cancellationToken: cancellationToken);
             return;
         }
+
+        var classicSteamId = resolved.ClassicSteamId;
 
         var telegramUsername = message.From.Username is { } username
             ? $"@{username}"

@@ -1,5 +1,6 @@
 ﻿using System.Globalization;
 using System.Text.RegularExpressions;
+using left_4_bot.Whois;
 
 namespace left_4_bot.Persistence;
 
@@ -26,11 +27,16 @@ public static partial class SteamProfileLinkParser
     [GeneratedRegex(@"^\s*(?<id>7656119\d+)\s*$", RegexOptions.CultureInvariant)]
     private static partial Regex BareSteam64Regex();
 
+    [GeneratedRegex(
+        @"^\s*(?<id>STEAM_\d+:[01]:\d+)\s*$",
+        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+    private static partial Regex ClassicSteamIdRegex();
+
     public static SteamLinkParseResult Parse(string? input)
     {
         if (string.IsNullOrWhiteSpace(input))
         {
-            return new SteamLinkParseFailed("Укажи ссылку на профиль Steam.");
+            return new SteamLinkParseFailed("Укажи ссылку на профиль Steam или Steam ID.");
         }
 
         var text = input.Trim();
@@ -65,10 +71,18 @@ public static partial class SteamProfileLinkParser
             return new SteamLinkParsedSteam64(fromBare);
         }
 
+        var classic = ClassicSteamIdRegex().Match(text);
+
+        if (classic.Success
+            && SteamIdConverter.TryToSteam64(classic.Groups["id"].Value, out var fromClassic))
+        {
+            return new SteamLinkParsedSteam64(fromClassic);
+        }
+
         return new SteamLinkParseFailed(
-            "Не понял ссылку. Нужен адрес вида:\n"
+            "Не понял Steam-профиль. Нужен адрес вида:\n"
             + "https://steamcommunity.com/profiles/7656119…\n"
-            + "или\n"
-            + "https://steamcommunity.com/id/имя");
+            + "или https://steamcommunity.com/id/имя\n"
+            + "или Steam ID: 7656119… / STEAM_1:1:…");
     }
 }

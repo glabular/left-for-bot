@@ -12,6 +12,8 @@ public static class RconServiceCollectionExtensions
         services.Configure<RconOptions>(configuration.GetSection(RconOptions.SectionName));
         services.AddSingleton<ServerRconService>();
         services.AddSingleton<ServerRestartService>();
+        services.AddSingleton<ServerBanService>();
+        services.AddSingleton<PlayerModerationSelectionStore>();
 
         return services;
     }
