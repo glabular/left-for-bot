@@ -8,7 +8,6 @@ public static class FriendlyFireReportBuilder
 
     private const int MaxVictimsPerAttackerInOthers = 3;
 
-    private const string Subtitle = "Кто попал по своим и сколько раз.";
     private const string CleanDayText = "Логи прочитаны. Попаданий по своим за этот день нет 🎉🕊";
     private const string OthersTitle = "Остальные";
 
@@ -21,15 +20,12 @@ public static class FriendlyFireReportBuilder
             return [];
         }
 
-        var messages = new List<PlayStatsOutboundMessage>
-        {
-            CreateQuietHtmlMessage(FormatIntro()),
-        };
+        var messages = new List<PlayStatsOutboundMessage>();
 
         switch (data.State)
         {
             case FriendlyFireSectionState.CleanDay:
-                messages.Add(CreateQuietHtmlMessage(CleanDayText));
+                messages.Add(CreateQuietHtmlMessage(FormatCleanDay()));
                 break;
 
             case FriendlyFireSectionState.HasHits:
@@ -47,13 +43,13 @@ public static class FriendlyFireReportBuilder
         return messages;
     }
 
-    private static string FormatIntro()
+    private static string FormatCleanDay()
     {
         var builder = new StringBuilder();
 
         builder.AppendLine(StatReportFormatting.FormatCategoryTitle(StatReportFormatting.FriendlyFireCategoryTitle));
         builder.AppendLine();
-        builder.Append(Subtitle);
+        builder.Append(CleanDayText);
 
         return builder.ToString();
     }
@@ -68,7 +64,7 @@ public static class FriendlyFireReportBuilder
 
         var builder = new StringBuilder();
 
-        builder.AppendLine("🔪 Топ за день:");
+        builder.AppendLine(StatReportFormatting.FormatCategoryTitle(StatReportFormatting.FriendlyFireCategoryTitle));
         builder.AppendLine();
 
         if (topOrdered.Count == 0)

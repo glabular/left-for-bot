@@ -4,7 +4,7 @@ namespace left_4_bot.ServerLogs;
 
 public static class StatReportFormatting
 {
-    public const string FriendlyFireCategoryTitle = "Дружественный огонь";
+    public const string FriendlyFireCategoryTitle = "🔪 Дружественный огонь";
 
     private const string ProtectTeammateCategoryBaseTitle = "Защита союзников";
 
