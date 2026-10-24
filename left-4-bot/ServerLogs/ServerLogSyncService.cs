@@ -248,11 +248,9 @@ public sealed class ServerLogSyncService
                     : FtpLocalExists.Overwrite;
 
                 await DownloadFileWithRetryAsync(
-                    session!,
                     file.FullPath,
                     localPath,
-                    existsMode,
-                    cancellationToken);
+                    existsMode);
 
                 localPaths.Add(localPath);
             }
@@ -277,39 +275,44 @@ public sealed class ServerLogSyncService
                 await session.DisposeAsync();
             }
         }
-    }
 
-    private async Task DownloadFileWithRetryAsync(
-        IFtpSession session,
-        string remotePath,
-        string localPath,
-        FtpLocalExists existsMode,
-        CancellationToken cancellationToken)
-    {
-        for (var attempt = 1; attempt <= MaxDownloadAttempts; attempt++)
+        // Captures `session` so a reconnect replaces the caller's session and `finally` still disposes it.
+        async Task DownloadFileWithRetryAsync(
+            string remotePath,
+            string localPath,
+            FtpLocalExists existsMode)
         {
-            try
+            for (var attempt = 1; attempt <= MaxDownloadAttempts; attempt++)
             {
-                await session.DownloadFileAsync(
-                    remotePath,
-                    localPath,
-                    existsMode,
-                    cancellationToken);
+                try
+                {
+                    await session!.DownloadFileAsync(
+                        remotePath,
+                        localPath,
+                        existsMode,
+                        cancellationToken);
 
-                return;
-            }
-            catch (Exception ex) when (attempt < MaxDownloadAttempts && IsTransientFtpError(ex, cancellationToken))
-            {
-                _logger.LogWarning(
-                    ex,
-                    "FTP download attempt {Attempt}/{MaxAttempts} failed for {RemotePath}",
-                    attempt,
-                    MaxDownloadAttempts,
-                    remotePath);
+                    return;
+                }
+                catch (Exception ex) when (attempt < MaxDownloadAttempts && IsTransientFtpError(ex, cancellationToken))
+                {
+                    _logger.LogWarning(
+                        ex,
+                        "FTP download attempt {Attempt}/{MaxAttempts} failed for {RemotePath}",
+                        attempt,
+                        MaxDownloadAttempts,
+                        remotePath);
 
-                // No manual reconnect here: the session holds one exclusive connection and
-                // FluentFTP re-establishes it on the next command (SelfConnectMode.OnConnectionLost).
-                await Task.Delay(RetryBaseDelay * attempt, cancellationToken);
+                    // Same recovery as a failed listing: drop the stale control connection.
+                    // FluentFTP's on-connection-lost reconnect leaves a half-open PASV session
+                    // that then times out again on the next file.
+                    await session!.DisposeAsync();
+                    session = null;
+
+                    await _ftpClient.ResetConnectionAsync(cancellationToken);
+                    await Task.Delay(RetryBaseDelay * attempt, cancellationToken);
+                    session = await _ftpClient.BeginSessionAsync(cancellationToken);
+                }
             }
         }
     }

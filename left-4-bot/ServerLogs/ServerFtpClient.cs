@@ -150,10 +150,12 @@ public sealed class ServerFtpClient : IServerFtpClient
     private static void ConfigureClient(AsyncFtpClient client)
     {
         client.Config.RetryAttempts = 3;
-        client.Config.ConnectTimeout = 60_000;
-        client.Config.ReadTimeout = 120_000;
-        client.Config.DataConnectionConnectTimeout = 60_000;
-        client.Config.DataConnectionReadTimeout = 120_000;
+        // A stalled PASV on this host usually succeeds on the next try. Long timeouts
+        // make every failed file cost 1–2 minutes, so /stat waits out each one.
+        client.Config.ConnectTimeout = 15_000;
+        client.Config.ReadTimeout = 20_000;
+        client.Config.DataConnectionConnectTimeout = 15_000;
+        client.Config.DataConnectionReadTimeout = 30_000;
         client.Config.SocketKeepAlive = true;
         client.Config.StaleDataCheck = true;
         client.Config.DataConnectionType = FtpDataConnectionType.PASV;
