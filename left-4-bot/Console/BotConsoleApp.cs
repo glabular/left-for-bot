@@ -69,8 +69,16 @@ public sealed class BotConsoleApp
         System.Console.WriteLine("3) Set group chat ID (0 = discovery mode)");
         System.Console.WriteLine("4) Set Steam Web API key");
         System.Console.WriteLine("0) Exit");
+        System.Console.WriteLine();
 
-        return System.Console.ReadLine()?.Trim() switch
+        var choice = ConsolePrompts.ReadLineOrTimeout(TimeSpan.FromSeconds(5));
+        if (choice is null)
+        {
+            System.Console.WriteLine("Starting bot with current settings.");
+            return ConsoleAction.StartBot;
+        }
+
+        return choice switch
         {
             "1" => ConsoleAction.StartBot,
             "2" => PromptAndSaveBotTokenAndContinue(),

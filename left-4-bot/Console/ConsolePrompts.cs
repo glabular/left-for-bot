@@ -1,4 +1,6 @@
-﻿namespace left_4_bot.Console;
+﻿using System.Text;
+
+namespace left_4_bot.Console;
 
 public static class ConsolePrompts
 {
@@ -22,6 +24,102 @@ public static class ConsolePrompts
 
             System.Console.WriteLine("Invalid number. Try again.");
         }
+    }
+
+    /// <summary>
+    /// Reads a console line, or returns <see langword="null"/> if nothing was typed
+    /// before <paramref name="timeout"/> elapses.
+    /// Once the user starts typing, waiting continues until Enter (no timeout).
+    /// Falls back to a blocking <see cref="System.Console.ReadLine"/> when input is redirected.
+    /// </summary>
+    public static string? ReadLineOrTimeout(TimeSpan timeout)
+    {
+        if (System.Console.IsInputRedirected)
+        {
+            return System.Console.ReadLine()?.Trim();
+        }
+
+        var deadline = DateTime.UtcNow + timeout;
+        var buffer = new StringBuilder();
+        var lastShownSeconds = -1;
+
+        while (true)
+        {
+            while (System.Console.KeyAvailable)
+            {
+                var key = System.Console.ReadKey(intercept: true);
+
+                if (key.Key == ConsoleKey.Enter)
+                {
+                    ClearCountdownLine();
+                    System.Console.WriteLine(buffer.ToString());
+                    return buffer.ToString().Trim();
+                }
+
+                if (key.Key == ConsoleKey.Backspace)
+                {
+                    if (buffer.Length > 0)
+                    {
+                        buffer.Length--;
+                        System.Console.Write("\b \b");
+                    }
+
+                    continue;
+                }
+
+                if (!char.IsControl(key.KeyChar))
+                {
+                    if (lastShownSeconds >= 0)
+                    {
+                        ClearCountdownLine();
+                        lastShownSeconds = -1;
+                    }
+
+                    buffer.Append(key.KeyChar);
+                    System.Console.Write(key.KeyChar);
+                }
+            }
+
+            if (buffer.Length > 0)
+            {
+                Thread.Sleep(50);
+                continue;
+            }
+
+            var remaining = deadline - DateTime.UtcNow;
+            if (remaining <= TimeSpan.Zero)
+            {
+                ClearCountdownLine();
+                return null;
+            }
+
+            var secondsLeft = (int)Math.Ceiling(remaining.TotalSeconds);
+            if (secondsLeft != lastShownSeconds)
+            {
+                lastShownSeconds = secondsLeft;
+                System.Console.Write($"\rAuto-start in {secondsLeft}s (type a menu choice to cancel)...");
+            }
+
+            Thread.Sleep(50);
+        }
+    }
+
+    private static void ClearCountdownLine()
+    {
+        var width = 80;
+        try
+        {
+            if (System.Console.WindowWidth > 1)
+            {
+                width = System.Console.WindowWidth - 1;
+            }
+        }
+        catch (IOException)
+        {
+            // Non-interactive / odd consoles: keep a fixed wipe width.
+        }
+
+        System.Console.Write("\r" + new string(' ', width) + "\r");
     }
 
     /// <summary>
