@@ -1,5 +1,4 @@
-﻿using left_4_bot.ServerLogs;
-using Microsoft.EntityFrameworkCore;
+﻿using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace left_4_bot.Persistence;
@@ -19,12 +18,9 @@ public static class PersistenceServiceCollectionExtensions
             options.UseSqlite($"Data Source={dbPath}"));
 
         services.AddSingleton<PlayersService>();
+        // Market rollover and early-close stay in the repo but are not started:
+        // they would poll SQLite every minute and force FTP log tailing until 20:00 MSK.
         services.AddSingleton<BettingService>();
-        services.AddSingleton<BetSettlementService>();
-        services.AddSingleton<IMarketChatNotifier, MarketChatNotifier>();
-        services.AddSingleton<DailyMarketRolloverService>();
-        services.AddHostedService<DailyMarketRolloverHostedService>();
-        services.AddSingleton<IServerLogTailConsumer, BettingEarlyCloseLogTailConsumer>();
 
         return services;
     }

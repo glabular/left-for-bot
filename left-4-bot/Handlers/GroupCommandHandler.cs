@@ -63,8 +63,6 @@ public sealed class GroupCommandHandler
 
         ⚠️ <b>Тотализатор (в разработке)</b>
         /balance — баланс таблов.
-        /bet — рынок (топ-1, Защита союзников): список целей и ставка.
-        /bet FAQ — частые вопросы по тотализатору.
 
         ℹ️ <b>Справка</b>
         /help — эта справка.
@@ -324,10 +322,6 @@ public sealed class GroupCommandHandler
                 await HandleBalanceAsync(bot, message, cancellationToken);
                 break;
 
-            case "bet":
-                await HandleBetAsync(bot, message, args, cancellationToken);
-                break;
-
             default:
                 handled = false;
                 break;
@@ -335,7 +329,7 @@ public sealed class GroupCommandHandler
 
         if (handled)
         {
-            await TryGrantCommandRewardAndNotifyAsync(bot, message, command, args, cancellationToken);
+            await TryGrantCommandRewardAsync(message, command, args, cancellationToken);
         }
     }
 
@@ -1852,8 +1846,7 @@ public sealed class GroupCommandHandler
         return builder.ToString();
     }
 
-    private async Task TryGrantCommandRewardAndNotifyAsync(
-        ITelegramBotClient bot,
+    private async Task TryGrantCommandRewardAsync(
         Message message,
         string command,
         string args,
@@ -1870,27 +1863,10 @@ public sealed class GroupCommandHandler
             return;
         }
 
-        var result = await _playersService.TryGrantCommandRewardAsync(
+        await _playersService.TryGrantCommandRewardAsync(
             message.From.Id,
             tabsAmount,
             cancellationToken);
-
-        if (result.Status != CommandRewardStatus.GrantedDailyComplete)
-        {
-            return;
-        }
-
-        var text = WithToteFooter(
-            $"""
-            {result.RewardsUsedToday}/{ToteEconomy.CommandRewardsPerGamingDay} наград за сегодня за использование команд получены.
-            Начислено за сегодня: {result.TabsGrantedToday} таблов.
-            Общий баланс: {result.Balance} таблов.
-            """);
-
-        await bot.SendMessage(
-            message.Chat.Id,
-            text,
-            cancellationToken: cancellationToken);
     }
 
     private async Task HandleLinkAsync(
